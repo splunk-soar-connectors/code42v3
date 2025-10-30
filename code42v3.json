@@ -22,7 +22,7 @@
         "cloud_instance": {
             "description": "Cloud instance of code42",
             "data_type": "string",
-            "default": "https://console.us.code42.com",
+            "default": "https://api.us.code42.com",
             "required": true,
             "order": 0
         },
@@ -4428,9 +4428,99 @@
         }
     ],
     "pip313_dependencies": {
-        "wheel": []
+        "wheel": [
+            {
+                "module": "boltons",
+                "input_file": "wheels/py3/boltons-25.0.0-py3-none-any.whl"
+            },
+            {
+                "module": "incydr",
+                "input_file": "wheels/py3/incydr-2.6.0-py3-none-any.whl"
+            },
+            {
+                "module": "isodate",
+                "input_file": "wheels/py3/isodate-0.7.2-py3-none-any.whl"
+            },
+            {
+                "module": "markdown_it_py",
+                "input_file": "wheels/py3/markdown_it_py-4.0.0-py3-none-any.whl"
+            },
+            {
+                "module": "mdurl",
+                "input_file": "wheels/py3/mdurl-0.1.2-py3-none-any.whl"
+            },
+            {
+                "module": "pydantic",
+                "input_file": "wheels/py313/pydantic-1.10.24-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+            },
+            {
+                "module": "pygments",
+                "input_file": "wheels/py3/pygments-2.19.2-py3-none-any.whl"
+            },
+            {
+                "module": "python_dotenv",
+                "input_file": "wheels/py3/python_dotenv-1.2.1-py3-none-any.whl"
+            },
+            {
+                "module": "requests_toolbelt",
+                "input_file": "wheels/shared/requests_toolbelt-1.0.0-py2.py3-none-any.whl"
+            },
+            {
+                "module": "rich",
+                "input_file": "wheels/py3/rich-14.2.0-py3-none-any.whl"
+            },
+            {
+                "module": "typing_extensions",
+                "input_file": "wheels/py3/typing_extensions-4.15.0-py3-none-any.whl"
+            }
+        ]
     },
     "pip39_dependencies": {
-        "wheel": []
+        "wheel": [
+            {
+                "module": "boltons",
+                "input_file": "wheels/py3/boltons-25.0.0-py3-none-any.whl"
+            },
+            {
+                "module": "incydr",
+                "input_file": "wheels/py3/incydr-2.6.0-py3-none-any.whl"
+            },
+            {
+                "module": "isodate",
+                "input_file": "wheels/py3/isodate-0.7.2-py3-none-any.whl"
+            },
+            {
+                "module": "markdown_it_py",
+                "input_file": "wheels/py3/markdown_it_py-3.0.0-py3-none-any.whl"
+            },
+            {
+                "module": "mdurl",
+                "input_file": "wheels/py3/mdurl-0.1.2-py3-none-any.whl"
+            },
+            {
+                "module": "pydantic",
+                "input_file": "wheels/py39/pydantic-1.10.24-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+            },
+            {
+                "module": "pygments",
+                "input_file": "wheels/py3/pygments-2.19.2-py3-none-any.whl"
+            },
+            {
+                "module": "python_dotenv",
+                "input_file": "wheels/py3/python_dotenv-1.2.1-py3-none-any.whl"
+            },
+            {
+                "module": "requests_toolbelt",
+                "input_file": "wheels/shared/requests_toolbelt-1.0.0-py2.py3-none-any.whl"
+            },
+            {
+                "module": "rich",
+                "input_file": "wheels/py3/rich-14.2.0-py3-none-any.whl"
+            },
+            {
+                "module": "typing_extensions",
+                "input_file": "wheels/py3/typing_extensions-4.15.0-py3-none-any.whl"
+            }
+        ]
     }
 }

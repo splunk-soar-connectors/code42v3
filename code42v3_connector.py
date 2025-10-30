@@ -1187,7 +1187,7 @@ class Code42V3Connector(BaseConnector):
 
         if self._client is None:
             self._client = incydr.Client(
-                url=self._base_url, api_client_id=self._client_id, api_client_secret=self._client_secret, proxies=self._proxy
+                url=self._base_url, api_client_id=self._client_id, api_client_secret=self._client_secret
             )
         handlers = {
             "test_connectivity": self._handle_test_connectivity,
