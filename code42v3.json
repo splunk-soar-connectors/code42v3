@@ -1591,12 +1591,58 @@
                     "order": 0,
                     "required": true,
                     "example_values": [
-                        {"equals": [{"term": "file.category", "values": "Executable"}]},
-                        {"is_any": [{"term": "destination.category", "values": ["AI Tools", "Cloud Storage"]}]},
-                        {"greater_than": [{"term": "risk.score", "value": 10}]},
-                        {"date_range": [{"term": "event.inserted", "start_date": "P1D"}]},
-                        {"matches_any": true},
-                        {"subquery": [{"query": {"equals": [{"term": "file.category", "values": "Executable"}]}}]}
+                        {
+                            "equals": [
+                                {
+                                    "term": "file.category",
+                                    "values": "Executable"
+                                }
+                            ]
+                        },
+                        {
+                            "is_any": [
+                                {
+                                    "term": "destination.category",
+                                    "values": [
+                                        "AI Tools",
+                                        "Cloud Storage"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "greater_than": [
+                                {
+                                    "term": "risk.score",
+                                    "value": 10
+                                }
+                            ]
+                        },
+                        {
+                            "date_range": [
+                                {
+                                    "term": "event.inserted",
+                                    "start_date": "P1D"
+                                }
+                            ]
+                        },
+                        {
+                            "matches_any": true
+                        },
+                        {
+                            "subquery": [
+                                {
+                                    "query": {
+                                        "equals": [
+                                            {
+                                                "term": "file.category",
+                                                "values": "Executable"
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
                     ]
                 }
             },
