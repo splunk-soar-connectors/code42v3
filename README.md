@@ -4,7 +4,7 @@ Publisher: Splunk <br>
 Connector Version: 1.0.0 <br>
 Product Vendor: code42 <br>
 Product Name: code42 v3 <br>
-Minimum Product Version: 7.0.1.39
+Minimum Product Version: 6.3.0
 
 Code42 provides simple, fast detection and response to everyday data loss from insider threats by focusing on customer data on endpoints and the cloud
 
@@ -45,7 +45,6 @@ VARIABLE | REQUIRED | TYPE | DESCRIPTION
 [remove legalhold custodian](#action-remove-legalhold-custodian) - Remove a custodian from a legal hold matter <br>
 [update actor](#action-update-actor) - Update actor metadata and monitoring dates <br>
 [list cases](#action-list-cases) - List cases with optional filters <br>
-[get departing employee watchlist id](#action-get-departing-employee-watchlist-id) - Retrieve the watchlist ID for the departing employee watchlist <br>
 [list available watchlists](#action-list-available-watchlists) - List watchlists available to an actor <br>
 [get watchlist id by name](#action-get-watchlist-id-by-name) - Resolve a watchlist ID either by its type (ex: `DEPARTING_EMPLOYEE`) or its title in the case of `CUSTOM` watchlists <br>
 [create watchlist](#action-create-watchlist) - Create a new watchlist <br>
@@ -466,7 +465,7 @@ Read only: **True**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**filters_json** | optional | Json string describing EventQuery filters | string | |
+**filters_json** | required | Json string describing EventQuery filters | string | |
 
 #### Action Output
 
@@ -1160,28 +1159,6 @@ summary.total_objects | numeric | | |
 summary.total_objects_successful | numeric | | |
 action_result.status | string | | |
 
-## action: 'get departing employee watchlist id'
-
-Retrieve the watchlist ID for the departing employee watchlist
-
-Type: **investigate** <br>
-Read only: **True**
-
-#### Action Parameters
-
-No parameters are required for this action
-
-#### Action Output
-
-DATA PATH | TYPE | CONTAINS | EXAMPLE VALUES
---------- | ---- | -------- | --------------
-action_result.data.\*.watchlist_id | string | | |
-action_result.summary.watchlist_id | string | | |
-action_result.message | string | | |
-summary.total_objects | numeric | | |
-summary.total_objects_successful | numeric | | |
-action_result.status | string | | |
-
 ## action: 'list available watchlists'
 
 List watchlists available to an actor
@@ -1339,14 +1316,14 @@ Read only: **False**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**actor_id** | required | Actor ID to remove | string | `code42 actor id` |
+**actor_ids** | required | Comma separated list of actor IDs to remove | string | |
 **watchlist_id** | required | Watchlist ID to update | string | `code42 watchlist id` |
 
 #### Action Output
 
 DATA PATH | TYPE | CONTAINS | EXAMPLE VALUES
 --------- | ---- | -------- | --------------
-action_result.parameter.actor_id | string | | |
+action_result.parameter.actor_ids | string | | |
 action_result.parameter.watchlist_id | string | `code42 watchlist id` | |
 action_result.summary.actor_id | string | | |
 action_result.summary.watchlist_id | string | | |

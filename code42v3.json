@@ -7,7 +7,7 @@
     "logo": "code42v3.svg",
     "logo_dark": "code42v3_dark.svg",
     "product_name": "code42 v3",
-    "python_version": "3.13",
+    "python_version": "3.9, 3.13",
     "fips_compliant": true,
     "product_version_regex": ".*",
     "publisher": "Splunk",
@@ -16,7 +16,7 @@
     "utctime_updated": "2025-10-18T19:36:49.737610Z",
     "package_name": "phantom_code42v3",
     "main_module": "code42v3_connector.py",
-    "min_phantom_version": "7.0.1.39",
+    "min_phantom_version": "6.3.0",
     "app_wizard_version": "1.0.0",
     "configuration": {
         "cloud_instance": {
@@ -1588,7 +1588,16 @@
                 "filters_json": {
                     "description": "Json string describing EventQuery filters",
                     "data_type": "string",
-                    "order": 0
+                    "order": 0,
+                    "required": true,
+                    "example_values": [
+                        {"equals": [{"term": "file.category", "values": "Executable"}]},
+                        {"is_any": [{"term": "destination.category", "values": ["AI Tools", "Cloud Storage"]}]},
+                        {"greater_than": [{"term": "risk.score", "value": 10}]},
+                        {"date_range": [{"term": "event.inserted", "start_date": "P1D"}]},
+                        {"matches_any": true},
+                        {"subquery": [{"query": {"equals": [{"term": "file.category", "values": "Executable"}]}}]}
+                    ]
                 }
             },
             "output": [
@@ -3832,41 +3841,6 @@
             "versions": "EQ(*)"
         },
         {
-            "action": "get departing employee watchlist id",
-            "identifier": "get_departing_employee_watchlist_id",
-            "description": "Retrieve the watchlist ID for the departing employee watchlist",
-            "type": "investigate",
-            "read_only": true,
-            "parameters": {},
-            "output": [
-                {
-                    "data_path": "action_result.data.*.watchlist_id",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.summary.watchlist_id",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.message",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "summary.total_objects",
-                    "data_type": "numeric"
-                },
-                {
-                    "data_path": "summary.total_objects_successful",
-                    "data_type": "numeric"
-                },
-                {
-                    "data_path": "action_result.status",
-                    "data_type": "string"
-                }
-            ],
-            "versions": "EQ(*)"
-        },
-        {
             "action": "list available watchlists",
             "identifier": "list_available_watchlists",
             "description": "List watchlists available to an actor",
@@ -4257,14 +4231,11 @@
             "type": "generic",
             "read_only": false,
             "parameters": {
-                "actor_id": {
-                    "description": "Actor ID to remove",
+                "actor_ids": {
+                    "description": "Comma separated list of actor IDs to remove",
                     "data_type": "string",
                     "order": 0,
-                    "required": true,
-                    "contains": [
-                        "code42 actor id"
-                    ]
+                    "required": true
                 },
                 "watchlist_id": {
                     "description": "Watchlist ID to update",
@@ -4278,7 +4249,7 @@
             },
             "output": [
                 {
-                    "data_path": "action_result.parameter.actor_id",
+                    "data_path": "action_result.parameter.actor_ids",
                     "data_type": "string"
                 },
                 {

@@ -307,7 +307,8 @@ class Code42V3Connector(BaseConnector):
             if session_count >= results_count:
                 break
 
-        action_result.add_data(sessions)
+        for session in sessions:
+            action_result.add_data(session)
 
         action_result.update_summary({"session_ids": [session["sessionId"] for session in sessions]})
         return action_result.set_status(phantom.APP_SUCCESS, "Sessions retrieved successfully")
@@ -1098,7 +1099,7 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, error_message)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to create watchlist {watchlist_name}. Error: {e!s}")
-        action_result.add_data(response.json())
+        action_result.add_data(response.dict())
         action_result.update_summary({"watchlist_id": response.watchlist_id, "watchlist_name": watchlist_name})
         return action_result.set_status(
             phantom.APP_SUCCESS, f"Successfully created watchlist {watchlist_name} with watchlist id: {response.watchlist_id}"
