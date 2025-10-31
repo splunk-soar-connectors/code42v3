@@ -30,7 +30,7 @@ VARIABLE | REQUIRED | TYPE | DESCRIPTION
 [run query](#action-run-query) - Search for file events using EventQuery <br>
 [search sessions](#action-search-sessions) - Search for sessions using optional filters <br>
 [run advanced query](#action-run-advanced-query) - Execute an advanced file event query using a json filter definition <br>
-[set session status](#action-set-session-status) - Update the status of one or more sessions <br>
+[set session state](#action-set-session-state) - Update the state of one or more sessions <br>
 [get actor by id](#action-get-actor-by-id) - Retrieve details for a single actor by id <br>
 [get actor by name](#action-get-actor-by-name) - Retrieve details for a single actor by name <br>
 [list users](#action-list-users) - List Code42 users with optional filters <br>
@@ -388,8 +388,8 @@ Read only: **True**
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
 **actor_id** | optional | Filter sessions by actor id | string | `code42 actor id` |
-**start_date** | optional | Filter sessions starting on or after this iso8601 timestamp | string | |
-**end_date** | optional | Filter sessions ending on or before this iso8601 timestamp | string | |
+**start_date** | optional | Filter sessions starting on or after this date. Format can be yyyy-MM-dd HH:mm:ss, a datetime string, POSIX int timestamp, or ISO 8601 timestamp | string | |
+**end_date** | optional | Filter sessions starting before this date. Format can be yyyy-MM-dd HH:mm:ss, a datetime string, POSIX int timestamp, or ISO 8601 timestamp | string | |
 **session_state** | optional | Comma separated list of session state values | string | |
 **results_count** | optional | Maximum number of sessions to retrieve | numeric | |
 
@@ -623,9 +623,9 @@ summary.total_objects | numeric | | |
 summary.total_objects_successful | numeric | | |
 action_result.status | string | | |
 
-## action: 'set session status'
+## action: 'set session state'
 
-Update the status of one or more sessions
+Update the state of one or more sessions
 
 Type: **generic** <br>
 Read only: **False**
@@ -635,14 +635,14 @@ Read only: **False**
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
 **session_ids** | required | Comma separated list of session IDs to update | string | `code42 session id` |
-**session_status** | required | Target session state value | string | |
+**session_state** | required | Target session state value | string | |
 
 #### Action Output
 
 DATA PATH | TYPE | CONTAINS | EXAMPLE VALUES
 --------- | ---- | -------- | --------------
 action_result.parameter.session_ids | string | | |
-action_result.parameter.session_status | string | | |
+action_result.parameter.session_state | string | | |
 action_result.message | string | | |
 summary.total_objects | numeric | | |
 summary.total_objects_successful | numeric | | |
@@ -837,12 +837,13 @@ Read only: **True**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**user_id** | required | Unique user ID to retrieve | string | |
+**user_id** | required | Unique user ID / username to retrieve | string | `code42 user id` `code42 username` |
 
 #### Action Output
 
 DATA PATH | TYPE | CONTAINS | EXAMPLE VALUES
 --------- | ---- | -------- | --------------
+action_result.parameter.user_id | string | `code42 user id` `code42 username` | |
 action_result.summary.total_count | numeric | | |
 action_result.data.\*.userId | string | `code42 user id` | |
 action_result.data.\*.legacyUserId | string | | |
@@ -858,7 +859,7 @@ action_result.data.\*.active | boolean | | |
 action_result.data.\*.blocked | boolean | | |
 action_result.data.\*.creationDate | string | | |
 action_result.data.\*.modificationDate | string | | |
-action_result.parameter.user_id | string | | |
+action_result.parameter.user_id | string | `code42 user id` `code42 username` | |
 action_result.message | string | | |
 summary.total_objects | numeric | | |
 summary.total_objects_successful | numeric | | |
@@ -999,7 +1000,7 @@ Read only: **False**
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
 **case_number** | required | Case number to update | string | `code42 case number` |
-**event_ids** | required | List of event IDs to attach | string | `code42 event id` |
+**event_ids** | required | Comma separated list of event IDs to attach | string | `code42 event id` |
 
 #### Action Output
 
@@ -1249,7 +1250,7 @@ Read only: **False**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**watchlist_name** | required | Watchlist type value to create | string | `code42 watchlist name` |
+**watchlist_name** | required | Watchlist type value to create. Example values: DEPARTING_EMPLOYEE, SUSPICIOUSSYSTEMACTIVITY, CUSTOM | string | `code42 watchlist name` |
 **title** | required | The required title for a CUSTOM watchlist | string | |
 **description** | optional | Watchlist description | string | |
 

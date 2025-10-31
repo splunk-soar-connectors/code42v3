@@ -27,9 +27,6 @@ class Code42v3OnPoll:
         self._client = client
         self._state = state or {}
 
-        FILE_EVENT_TO_SIGNATURE_ID_MAP = build_signature_id_map()
-        self._connector.debug_print(f"signature id map: {FILE_EVENT_TO_SIGNATURE_ID_MAP}")
-
     def _get_date_parameters(self):
         # returns start date and end date for the poll.
         config = self._connector.get_config()
@@ -38,18 +35,27 @@ class Code42v3OnPoll:
 
         if last_time is None:  # first run. No last time found.
             self._connector.debug_print(f"no last time found, getting initial poll start date: {config.get('initial_poll_start_date')}")
-            start_dt = self._coerce_to_datetime(config.get("initial_poll_start_date")) or (now_utc - timedelta(days=30))
-            end_dt = self._coerce_to_datetime(config.get("initial_poll_end_date")) or now_utc
+            start_dt, start_err = self._coerce_to_datetime(config.get("initial_poll_start_date"))
+            end_dt, end_err = self._coerce_to_datetime(config.get("initial_poll_end_date"))
+            error = None
+            if start_err or end_err:
+                msgs = []
+                if start_err:
+                    msgs.append(f"start: {start_err}")
+                if end_err:
+                    msgs.append(f"end: {end_err}")
+                error = ValueError("; ".join(msgs))
+            return start_dt, end_dt, error
         else:  # subsequent runs. Last time found.
             self._connector.debug_print(f"last time found, setting start date to last time: {last_time}")
-            start_dt = self._coerce_to_datetime(last_time)
+            start_dt, start_err = self._coerce_to_datetime(last_time)
             end_dt = now_utc
-        return start_dt, end_dt
+            return start_dt, end_dt, start_err
 
     def _save_last_time(self, session_time):
         # saves the last time of the session to the state.
-        dt = self._coerce_to_datetime(session_time)
-        if not dt:
+        dt, err = self._coerce_to_datetime(session_time)
+        if err or not dt:
             return
         self._state["last_time"] = dt.timestamp()
         self._connector.save_state(self._state)
@@ -68,20 +74,20 @@ class Code42v3OnPoll:
 
     def _coerce_to_datetime(self, value):
         if value is None:
-            return None
+            return None, None
         if isinstance(value, datetime):
             if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
-            return value.astimezone(timezone.utc)
+                return value.replace(tzinfo=timezone.utc), None
+            return value.astimezone(timezone.utc), None
         if isinstance(value, (int, float)):
             timestamp = value / 1000 if value > 1_000_000_000_000 else value
-            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc), None
         if isinstance(value, str):
             try:
-                return self.parse_datetime(value)
+                return self.parse_datetime(value), None
             except Exception as exc:
-                raise ValueError(f"Unable to parse datetime value '{value}': {exc}")
-        raise ValueError(f"Invalid datetime value: {value}")
+                return None, ValueError(f"Unable to parse datetime value '{value}': {exc}")
+        return None, ValueError(f"Invalid datetime value: {value}")
 
     @staticmethod
     def _format_datetime(dt):
@@ -103,7 +109,9 @@ class Code42v3OnPoll:
         overlap_hours = config.get("overlap_hours", 10)
         severity_filter = config.get("severity_filter", "low,medium,high,critical")
         severity_filter_list = [severity.strip().lower() for severity in severity_filter.split(",")]
-
+        risk_score_filter_list = [self._get_risk_score_from_sevirity(severity) for severity in severity_filter_list]
+        if -1 in risk_score_filter_list:
+            return action_result.set_status(phantom.APP_ERROR, "Invalid severity filter. Expected values are: low, medium, high, critical")
         container_count = param.get("container_count", DEFAULT_CONTAINER_COUNT)
         artifact_count = param.get("artifact_count", DEFAULT_ARTIFACT_COUNT)
 
@@ -116,33 +124,53 @@ class Code42v3OnPoll:
                 return phantom_status
             self._add_new_artifacts_to_container(container_id, session_details.session_id, artifact_count)
         else:
-            start_dt, end_dt = self._get_date_parameters()
+            start_dt, end_dt, dt_error = self._get_date_parameters()
+            if dt_error:
+                return action_result.set_status(phantom.APP_ERROR, f"Invalid date parameter: {dt_error}")
+            # Apply defaults if values are missing (caller decision)
+            if start_dt is None:
+                start_dt = datetime.now(timezone.utc) - timedelta(days=30)
+            if end_dt is None:
+                end_dt = datetime.now(timezone.utc)
             # starts from (start_dt - overlap_hours) since a session can be updated after it's ingestion.
             start_dt_overlap = start_dt - timedelta(hours=overlap_hours)
             self._connector.debug_print(f"start_dt_overlap: {start_dt_overlap}, end_dt: {end_dt}")
 
+            sessions = []
             sessions_iter = self._client.sessions.v1.iter_all(
                 start_time=start_dt_overlap,
                 end_time=end_dt,
                 sort_key=SortKeys.END_TIME,
+                severities=risk_score_filter_list,
             )
 
-            added_container_count = 0
+            # get all sessions and reverse the list to get the oldest sessions first.
+            # SortDirection.ASC is rejecting the request. So we are reversing the list.
             for session in sessions_iter:
-                # skips session if severity is not in severity filter.
-                if self._get_session_severity_from_scores(session.scores) not in severity_filter_list:
-                    self._connector.debug_print(
-                        f"session {session.session_id} severity {self._get_session_severity_from_scores(session.scores)} is not in severity filter {severity_filter_list}, skipping session"
-                    )
-                    continue
+                sessions.append(session)
+            sessions.reverse()
 
-                last_updated_dt = self._coerce_to_datetime(session.last_updated)
+            added_container_count = 0
+            for session in sessions:
+                # skips session if severity is not in severity filter.
+                # if self._get_session_severity_from_scores(session.scores) not in severity_filter_list:
+                #     self._connector.debug_print(
+                #         f"session {session.session_id} severity {self._get_session_severity_from_scores(session.scores)} is not in severity filter {severity_filter_list}, skipping session"
+                #     )
+                #     continue
+
+                last_updated_dt, last_updated_err = self._coerce_to_datetime(session.last_updated)
+                if last_updated_err:
+                    self._connector.debug_print(f"error coercing session.last_updated: {last_updated_err}, skipping session")
                 # check if container already exists for the session.
                 container_id = self._connector._get_existing_container_id_for_sdi(session.session_id)
                 if container_id is not None:
+                    self._connector.debug_print(f"container id: {container_id} found for session {session.session_id}")
                     # if true, and if container update time is after last updated time, update the container again with new session details.
                     container_metadata = self._connector._get_container(container_id)
-                    container_update_dt = self._coerce_to_datetime(container_metadata.get("container_update_time", None))
+                    container_update_dt, container_update_err = self._coerce_to_datetime(container_metadata.get("container_update_time", None))
+                    if container_update_err:
+                        container_update_dt = None
                     if container_update_dt and last_updated_dt > container_update_dt:
                         self._connector.debug_print(
                             f"container update time {container_update_dt} is before last updated time {last_updated_dt}, updating container {container_id}"
@@ -159,6 +187,7 @@ class Code42v3OnPoll:
                         continue
                 else:
                     # if container does not exist, create a new container with session details.
+                    self._connector.debug_print(f"container does not exist for session {session.session_id}, creating new container")
                     container_id = self._create_or_update_container(session)
                     if container_id is None:
                         phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
@@ -213,6 +242,7 @@ class Code42v3OnPoll:
             if self._connector.artifact_exists(container_id, event.event.id):
                 self._connector.debug_print(f"artifact already exists for event {event.event.id}")
                 continue
+            self._connector.debug_print(f"creating artifact for event {event.event.id}")
             artifact = self._create_artifact_payload(container_id, event)
             artifacts.append(artifact)
             total_artifacts_count += 1
@@ -242,6 +272,17 @@ class Code42v3OnPoll:
         file_events = self._get_session_events(session_id)
         self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
         return container_id
+
+    @staticmethod
+    def _get_risk_score_from_sevirity(severity):
+        risk_score_order = {
+            "critical": 4,
+            "high": 3,
+            "medium": 2,
+            "low": 1,
+            "info": 0,
+        }
+        return risk_score_order.get(severity, -1)
 
     @staticmethod
     def _get_session_severity_from_scores(scores):
@@ -286,7 +327,7 @@ class Code42v3OnPoll:
         artifact_dict = {
             "name": "Code42 File Event Artifact",
             "container_id": container_id,
-            "severity": self._normalize_severity(file_event.risk.severity),
+            "severity": self._normalize_severity(file_event.risk.severity) if file_event.risk.severity else "low",
             "label": file_event.event.detector_display_name,
             "cef": cef,
             "data": file_event.json(),

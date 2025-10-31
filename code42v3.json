@@ -1310,12 +1310,12 @@
                     "order": 0
                 },
                 "start_date": {
-                    "description": "Filter sessions starting on or after this iso8601 timestamp",
+                    "description": "Filter sessions starting on or after this date. Format can be yyyy-MM-dd HH:mm:ss, a datetime string, POSIX int timestamp, or ISO 8601 timestamp",
                     "data_type": "string",
                     "order": 1
                 },
                 "end_date": {
-                    "description": "Filter sessions ending on or before this iso8601 timestamp",
+                    "description": "Filter sessions starting before this date. Format can be yyyy-MM-dd HH:mm:ss, a datetime string, POSIX int timestamp, or ISO 8601 timestamp",
                     "data_type": "string",
                     "order": 2
                 },
@@ -2263,9 +2263,9 @@
             "versions": "EQ(*)"
         },
         {
-            "action": "set session status",
-            "identifier": "set_session_status",
-            "description": "Update the status of one or more sessions",
+            "action": "set session state",
+            "identifier": "set_session_state",
+            "description": "Update the state of one or more sessions",
             "type": "generic",
             "read_only": false,
             "parameters": {
@@ -2278,7 +2278,7 @@
                     ],
                     "order": 0
                 },
-                "session_status": {
+                "session_state": {
                     "description": "Target session state value",
                     "data_type": "string",
                     "required": true,
@@ -2298,7 +2298,7 @@
                     "data_type": "string"
                 },
                 {
-                    "data_path": "action_result.parameter.session_status",
+                    "data_path": "action_result.parameter.session_state",
                     "data_type": "string"
                 },
                 {
@@ -2794,13 +2794,29 @@
             "read_only": true,
             "parameters": {
                 "user_id": {
-                    "description": "Unique user ID to retrieve",
+                    "description": "Unique user ID / username to retrieve",
                     "data_type": "string",
                     "required": true,
-                    "order": 0
+                    "order": 0,
+                    "contains": [
+                        "code42 user id",
+                        "code42 username"
+                    ],
+                    "example_values": [
+                        "1234567890",
+                        "jdoe@example.com"
+                    ]
                 }
             },
             "output": [
+                {
+                    "data_path": "action_result.parameter.user_id",
+                    "data_type": "string",
+                    "contains": [
+                        "code42 user id",
+                        "code42 username"
+                    ]
+                },
                 {
                     "data_path": "action_result.summary.total_count",
                     "data_type": "numeric"
@@ -2866,7 +2882,11 @@
                 },
                 {
                     "data_path": "action_result.parameter.user_id",
-                    "data_type": "string"
+                    "data_type": "string",
+                    "contains": [
+                        "code42 user id",
+                        "code42 username"
+                    ]
                 },
                 {
                     "data_path": "action_result.message",
@@ -3321,7 +3341,7 @@
                     ]
                 },
                 "event_ids": {
-                    "description": "List of event IDs to attach",
+                    "description": "Comma separated list of event IDs to attach",
                     "required": true,
                     "data_type": "string",
                     "allow_list": true,
@@ -3998,7 +4018,7 @@
             "read_only": false,
             "parameters": {
                 "watchlist_name": {
-                    "description": "Watchlist type value to create",
+                    "description": "Watchlist type value to create. Example values: DEPARTING_EMPLOYEE, SUSPICIOUSSYSTEMACTIVITY, CUSTOM",
                     "data_type": "string",
                     "order": 0,
                     "required": true,
