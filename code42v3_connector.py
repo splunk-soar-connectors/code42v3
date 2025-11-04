@@ -177,8 +177,7 @@ class Code42V3Connector(BaseConnector):
         # return id or None
         if response.json().get("data", None):
             return response.json().get("data", None)[0].get("id", None)
-        else:
-            return None
+        return None
 
     def _extract_http_errors(self, e):
         error_detail = ""
@@ -1236,11 +1235,15 @@ class Code42V3Connector(BaseConnector):
         if not container_id:
             return action_result.set_status(phantom.APP_ERROR, "failed to get container id")
         try:
-            Vault.create_attachment(file_content, container_id, file_name=file_name)
+            status = Vault.create_attachment(file_content, container_id, file_name=file_name)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"failed to create attachment for {file_name}. Error: {e!s}")
+        if not status.get("succeeded", False):
+            return action_result.set_status(
+                phantom.APP_ERROR, f"failed to create attachment for {file_name}. Error message: {status.get('message', 'Unknown error')}"
+            )
         status_message = f"{file_name} was successfully downloaded and attached to container {container_id}"
-        action_result.update_summary({"file_name": file_name, "container_id": container_id})
+        action_result.update_summary({"file_name": file_name, "container_id": container_id, "vault_id": status.get("vault_id")})
         return action_result.set_status(phantom.APP_SUCCESS, status_message)
 
     def handle_action(self, param):
