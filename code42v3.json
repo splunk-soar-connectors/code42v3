@@ -1,17 +1,17 @@
 {
     "appid": "56f6a8c4-b70c-4a04-aaef-7842f1228b3f",
-    "name": "code42 v3",
+    "name": "Code42 v3",
     "description": "Code42 provides simple, fast detection and response to everyday data loss from insider threats by focusing on customer data on endpoints and the cloud",
     "type": "generic",
-    "product_vendor": "code42",
-    "logo": "code42v3.svg",
-    "logo_dark": "code42v3_dark.svg",
-    "product_name": "code42 v3",
+    "product_vendor": "Code42",
+    "logo": "logo_code42v3.svg",
+    "logo_dark": "logo_code42v3_dark.svg",
+    "product_name": "Code42 v3",
     "python_version": "3.9, 3.13",
     "fips_compliant": true,
     "product_version_regex": ".*",
     "publisher": "Splunk",
-    "license": "Copyright (c) splunk, 2025",
+    "license": "Copyright (c) 2025 Splunk Inc.",
     "app_version": "1.0.0",
     "utctime_updated": "2025-10-18T19:36:49.737610Z",
     "package_name": "phantom_code42v3",
@@ -111,7 +111,6 @@
                     "required": true,
                     "order": 0,
                     "description": "Session ID to limit the ingestion to",
-                    "allow_list": true,
                     "contains": [
                         "code42 session id"
                     ]
@@ -2511,6 +2510,7 @@
                 "name": {
                     "description": "Unique actor name to retrieve.",
                     "data_type": "string",
+                    "required": true,
                     "order": 0
                 },
                 "prefer_parent": {
@@ -4209,7 +4209,7 @@
             "read_only": false,
             "parameters": {
                 "actor_ids": {
-                    "description": "List of actor IDs to add",
+                    "description": "Comma separated list of actor IDs to add",
                     "data_type": "string",
                     "order": 0,
                     "required": true,
@@ -4419,6 +4419,7 @@
             "parameters": {
                 "file_hash": {
                     "description": "File hash to hunt for.",
+                    "required": true,
                     "data_type": "string",
                     "order": 0,
                     "contains": [

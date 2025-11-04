@@ -1,16 +1,16 @@
-# code42 v3
+# Code42 v3
 
 Publisher: Splunk <br>
 Connector Version: 1.0.0 <br>
-Product Vendor: code42 <br>
-Product Name: code42 v3 <br>
+Product Vendor: Code42 <br>
+Product Name: Code42 v3 <br>
 Minimum Product Version: 6.3.0
 
 Code42 provides simple, fast detection and response to everyday data loss from insider threats by focusing on customer data on endpoints and the cloud
 
 ### Configuration variables
 
-This table lists the configuration variables required to operate code42 v3. These variables are specified when configuring a code42 v3 asset in Splunk SOAR.
+This table lists the configuration variables required to operate Code42 v3. These variables are specified when configuring a Code42 v3 asset in Splunk SOAR.
 
 VARIABLE | REQUIRED | TYPE | DESCRIPTION
 -------- | -------- | ---- | -----------
@@ -701,7 +701,7 @@ Read only: **True**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**name** | optional | Unique actor name to retrieve. | string | |
+**name** | required | Unique actor name to retrieve. | string | |
 **prefer_parent** | optional | Whether to prefer the parent actor. | boolean | |
 
 #### Action Output
@@ -1289,7 +1289,7 @@ Read only: **False**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**actor_ids** | required | List of actor IDs to add | string | `code42 actor id` |
+**actor_ids** | required | Comma separated list of actor IDs to add | string | `code42 actor id` |
 **watchlist_id** | required | Watchlist ID to update | string | `code42 watchlist id` |
 
 #### Action Output
@@ -1373,7 +1373,7 @@ Read only: **False**
 
 PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 --------- | -------- | ----------- | ---- | --------
-**file_hash** | optional | File hash to hunt for. | string | `code42 file hash` |
+**file_hash** | required | File hash to hunt for. | string | `code42 file hash` |
 **file_name** | optional | File name to use for the attachment | string | |
 
 #### Action Output

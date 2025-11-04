@@ -31,6 +31,7 @@ from incydr.enums.watchlists import WatchlistType
 from phantom.action_result import ActionResult
 from phantom.base_connector import BaseConnector
 from phantom.vault import Vault
+from phantom_common.install_info import get_verify_ssl_setting
 from requests import HTTPError
 
 from code42v3_consts import (
@@ -123,7 +124,7 @@ class Code42V3Connector(BaseConnector):
         url = f'{self.get_phantom_base_url()}rest/container?_filter_source_data_identifier="{sdi}"&_filter_asset={self.get_asset_id()}'
         # Make rest call
         try:
-            response = requests.get(url, verify=False, timeout=30)  # nosemgrep
+            response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
         except Exception as e:
             raise RuntimeError("Encountered an error getting the existing container ID from Phantom.") from e
 
@@ -149,9 +150,9 @@ class Code42V3Connector(BaseConnector):
             requests.post(
                 f"{self.get_phantom_base_url()}rest/container/{container_id}",
                 data=json.dumps(container_metadata),
-                verify=False,
+                verify=get_verify_ssl_setting(),
                 timeout=30,
-            )  # nosemgrep
+            )
         except Exception as e:
             raise RuntimeError("Encountered an error updating container metadata.") from e
 
@@ -170,7 +171,7 @@ class Code42V3Connector(BaseConnector):
         # Make rest call
         try:
             self.debug_print(f"Making request on url: {url}")
-            response = requests.get(url, verify=False, timeout=30)  # nosemgrep
+            response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
         except Exception:
             return None
         # return id or None
@@ -205,7 +206,7 @@ class Code42V3Connector(BaseConnector):
         """
         url = f"{self.get_phantom_base_url()}rest/container/{container_id}"
         try:
-            response = requests.get(url, verify=False, timeout=30)  # nosemgrep
+            response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)  # nosemgrep
         except Exception:
             return None
         return response.json()
@@ -294,23 +295,20 @@ class Code42V3Connector(BaseConnector):
                 end_time=param.get("end_date", None),
                 actor_id=param.get("actor_id", None),
                 states=input_states,
-                page_size=results_count,
             )
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to search sessions. Error: {e!s}")
 
-        sessions = []
+        session_ids = []
         session_count = 0
         for session in response_iter:
-            sessions.append(session.dict())
+            action_result.add_data(session.dict())
+            session_ids.append(session.session_id)
             session_count += 1
             if session_count >= results_count:
                 break
 
-        for session in sessions:
-            action_result.add_data(session)
-
-        action_result.update_summary({"session_ids": [session["sessionId"] for session in sessions]})
+        action_result.update_summary({"session_ids": session_ids})
         return action_result.set_status(phantom.APP_SUCCESS, "Sessions retrieved successfully")
 
     # run query
@@ -398,26 +396,21 @@ class Code42V3Connector(BaseConnector):
         if phantom.is_fail(ret_val):
             return action_result.get_status()
 
-        if not bool(getattr(query, "groups", None)):
+        if not getattr(query, "groups", None):
             return action_result.set_status(phantom.APP_ERROR, "No filters provided")
 
         returned = 0
-        events = []
-
         while returned < max_results:
             response = self._client.file_events.v2.search(query)
             page_events = getattr(response, "file_events", [])
             for event in page_events:
-                events.append(event.json())
+                action_result.add_data(json.loads(event.json()))
                 returned += 1
                 if returned >= max_results:
                     break
             if response.next_pg_token is None:
                 break
             query.page_token = response.next_pg_token
-
-        for event in events:
-            action_result.add_data(json.loads(event))
 
         action_result.update_summary(
             {
@@ -443,23 +436,13 @@ class Code42V3Connector(BaseConnector):
         {"matches_any": true}
         {"subquery": [{"query": {...}}]
         """
-        op_map_multi_vals = {
-            "equals": "equals",
-            "not_equals": "not_equals",
-            "exists": "exists",
-            "does_not_exist": "does_not_exist",
-            "greater_than": "greater_than",
-            "less_than": "less_than",
-            "is_any": "is_any",
-            "is_none": "is_none",
-            "date_range": "date_range",
-        }
+        ops = ("equals", "not_equals", "exists", "does_not_exist", "greater_than", "less_than", "is_any", "is_none", "date_range")
 
         # matches_any flips group clause to OR
         if filters_dict.get("matches_any"):
             query = query.matches_any()
 
-        for op, method_name in op_map_multi_vals.items():
+        for op in ops:
             if op not in filters_dict:
                 continue
             items = filters_dict[op]
@@ -469,18 +452,18 @@ class Code42V3Connector(BaseConnector):
                 term = item.get("term")
                 if not term and op != "date_range":
                     continue
-                if op in ("equals", "not_equals", "is_any", "is_none"):
+                if op in {"equals", "not_equals", "is_any", "is_none"}:
                     values = item.get("values")
                     if values is None:
                         continue
-                    query = getattr(query, method_name)(term, values)
-                elif op in ("greater_than", "less_than"):
+                    query = getattr(query, op)(term, values)
+                elif op in {"greater_than", "less_than"}:
                     value = item.get("value")
                     if value is None:
                         continue
-                    query = getattr(query, method_name)(term, value)
-                elif op in ("exists", "does_not_exist"):
-                    query = getattr(query, method_name)(term)
+                    query = getattr(query, op)(term, value)
+                elif op in {"exists", "does_not_exist"}:
+                    query = getattr(query, op)(term)
                 elif op == "date_range":
                     term = item.get("term")
                     query = query.date_range(term=term, start_date=item.get("start_date"), end_date=item.get("end_date"))
@@ -527,14 +510,12 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, "No filters provided")
 
         returned = 0
-        events = []
-
         try:
             while returned < max_results:
                 response = self._client.file_events.v2.search(query)
                 page_events = getattr(response, "file_events", [])
                 for event in page_events:
-                    events.append(event.json())
+                    action_result.add_data(json.loads(event.json()))
                     returned += 1
                     if returned >= max_results:
                         break
@@ -543,8 +524,6 @@ class Code42V3Connector(BaseConnector):
                 query.page_token = response.next_pg_token
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to run advanced query. Error: {e!s}")
-        for event in events:
-            action_result.add_data(json.loads(event))
         action_result.update_summary({"total_count": returned})
         return action_result.set_status(phantom.APP_SUCCESS)
 
@@ -558,16 +537,15 @@ class Code42V3Connector(BaseConnector):
             ActionResult: The action result object which contains the session state.
         """
         self.save_progress("Setting session state")
-        phantom_status = phantom.APP_SUCCESS
         session_ids = param.get("session_ids").split(",")
         session_ids = [session_id.strip() for session_id in session_ids if session_id.strip()]
         if len(session_ids) == 0:
             return action_result.set_status(phantom.APP_ERROR, "No session IDs provided")
 
         state = param.get("session_state").strip().upper()
-        valid_states = [e.value for e in SessionStates]
+        valid_states = {e.value for e in SessionStates}
         if state not in valid_states:
-            return action_result.set_status(phantom.APP_ERROR, "Invalid session state. Expected values are: {}".format(", ".join(valid_states)))
+            return action_result.set_status(phantom.APP_ERROR, f"Invalid session state. Expected values are: {valid_states}")
         try:
             responses = self._client.sessions.v1.update_state_by_id(session_ids=session_ids, new_state=SessionStates(state))
         except HTTPError as e:
@@ -577,14 +555,16 @@ class Code42V3Connector(BaseConnector):
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to update session state. Error: {e!s}")
         failed_count = 0
+        failure_messages = ""
+        phantom_status = phantom.APP_SUCCESS
         for response in responses:
-            if response.status_code != 204:
+            if not response.ok:
                 phantom_status = phantom.APP_ERROR
-                failure_messages += response.text
+                failure_messages += f"{response.text}\n\n"
                 failed_count += 1
         status_message = f"Successfully set session state to {state} for all {len(session_ids)} session(s)"
         if failed_count > 0:
-            status_message = f"Session state set to {state} successfully for {len(session_ids) - failed_count} session(s). Failure details: {failure_messages}"
+            status_message = f"Session state set to {state} successfully for {len(session_ids) - failed_count} session(s), failed for {failed_count} session(s). Failure details: {failure_messages}"
         action_result.update_summary(
             {
                 "total_count": len(session_ids),
@@ -660,7 +640,7 @@ class Code42V3Connector(BaseConnector):
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to deactivate user {user_id}. Error: {e!s}")
 
-        if response.status_code == 200:
+        if response.ok:
             action_result.update_summary({"user_id": user_id, "deactivated": True})
             return action_result.set_status(phantom.APP_SUCCESS, f"User with id {user_id} deactivated successfully")
 
@@ -683,7 +663,7 @@ class Code42V3Connector(BaseConnector):
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to reactivate user {user_id}. Error: {e!s}")
 
-        if response.status_code == 200:
+        if response.ok:
             action_result.update_summary({"user_id": user_id, "reactivated": True})
             return action_result.set_status(phantom.APP_SUCCESS, f"User with id {user_id} reactivated successfully")
 
@@ -705,7 +685,7 @@ class Code42V3Connector(BaseConnector):
         prefer_parent = param.get("prefer_parent")
         try:
             actor = self._client.actors.v1.get_actor_by_id(actor_id=actor_id, prefer_parent=prefer_parent)
-            action_result.add_data(json.loads(actor.json()))
+            action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
                     "actor_id": actor.actor_id,
@@ -729,7 +709,7 @@ class Code42V3Connector(BaseConnector):
         prefer_parent = param.get("prefer_parent")
         try:
             actor = self._client.actors.v1.get_actor_by_name(name=name, prefer_parent=prefer_parent)
-            action_result.add_data(json.loads(actor.json()))
+            action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
                     "actor_id": actor.actor_id,
@@ -773,7 +753,7 @@ class Code42V3Connector(BaseConnector):
             response = self._client.actors.v1.update_actor(actor=actor_id, notes=notes, start_date=start_date, end_date=end_date)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to update actor `{actor_id}`. Error: {e}")
-        action_result.add_data(json.loads(response.json()))
+        action_result.add_data(response.dict())
         return action_result.set_status(phantom.APP_SUCCESS, f"Actor with id {actor_id} updated successfully")
 
     """
@@ -856,7 +836,7 @@ class Code42V3Connector(BaseConnector):
         if params.get("findings"):
             case.findings = params.get("findings")
         if status := params.get("status"):
-            valid_statuses = [e.value for e in CaseStatus]
+            valid_statuses = {e.value for e in CaseStatus}
             sanitized_status = status.strip().upper()
             if sanitized_status not in valid_statuses:
                 return action_result.set_status(phantom.APP_ERROR, f"Invalid status. Expected values are: {', '.join(valid_statuses)}")
@@ -923,7 +903,7 @@ class Code42V3Connector(BaseConnector):
 
         status = None
         if status_param := params.get("status"):
-            valid_statuses = [e.value for e in CaseStatus]
+            valid_statuses = {e.value for e in CaseStatus}
             sanitized_status = status_param.strip().upper()
             if sanitized_status not in valid_statuses:
                 return action_result.set_status(phantom.APP_ERROR, f"Invalid status. Expected values are: {', '.join(valid_statuses)}")
@@ -968,7 +948,7 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, error_message)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to add events to case {case_number}. Error: {e!s}")
-        if response.status_code != 204:
+        if not response.ok:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to add events to case {case_number}. Error: {response.text}")
         action_result.update_summary({"added_event_count": len(event_ids)})
         return action_result.set_status(phantom.APP_SUCCESS, f"Successfully added events to case {case_number}")
@@ -1021,7 +1001,7 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, error_message)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to remove custodian {user_id} from matter {matter_id}. Error: {e!s}")
-        if response.status_code != 200:
+        if not response.ok:
             return action_result.set_status(
                 phantom.APP_ERROR,
                 f"Failed to remove custodian {user_id} from matter {matter_id}. Status code: {response.status_code}. Error: {response.text}",
@@ -1122,7 +1102,7 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, error_message)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to delete watchlist {watchlist_id}. Error: {e!s}")
-        if response.status_code != 200:
+        if not response.ok:
             return action_result.set_status(
                 phantom.APP_ERROR, f"Failed to delete watchlist {watchlist_id}. Status code: {response.status_code}. Error: {response.text}"
             )
@@ -1152,7 +1132,7 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, error_message)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to add actors {actor_ids} to watchlist {watchlist_id}. Error: {e!s}")
-        if response.status_code not in [200, 204]:
+        if not response.ok:
             return action_result.set_status(
                 phantom.APP_ERROR, f"Failed to add actors {actor_ids} to watchlist {watchlist_id}. Error: {response.text}"
             )
@@ -1181,7 +1161,7 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(
                 phantom.APP_ERROR, f"Failed to remove actors {actor_ids} from watchlist {watchlist_id}. Error: {e!s}"
             )
-        if response.status_code not in [200, 204]:
+        if not response.ok:
             return action_result.set_status(
                 phantom.APP_ERROR, f"Failed to remove actors {actor_ids} from watchlist {watchlist_id}. Error: {response.text}"
             )
@@ -1224,7 +1204,7 @@ class Code42V3Connector(BaseConnector):
 
         response = self._client.files.v1.stream_file_by_sha256(sha256=file_hash)
 
-        if 200 <= response.status_code < 300:
+        if response.ok:
             try:
                 return b"".join(chunk for chunk in response.iter_content(chunk_size=128) if chunk)
             finally:

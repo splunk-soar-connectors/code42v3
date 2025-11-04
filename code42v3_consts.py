@@ -14,7 +14,7 @@
 # and limitations under the License.
 
 # max_results default value
-MAX_RESULTS_DEFAULT = 1000
+MAX_RESULTS_DEFAULT = 50
 
 # results per page
 RESULTS_PER_PAGE = 50

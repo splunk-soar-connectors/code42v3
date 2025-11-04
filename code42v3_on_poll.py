@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 from datetime import datetime, timedelta, timezone
 
 import dateutil.parser
@@ -101,7 +102,7 @@ class Code42v3OnPoll:
 
     def handle_on_poll(self, param, action_result):
         # handles the on poll action. Gets sessions in a given time range and creates/updates containers and artifacts.
-        phantom_status = action_result.set_status(phantom.APP_SUCCESS)
+
         self._connector.debug_print(f"param from on_poll input: {param}")
         session_id = param.get("source_id")
         self._connector.debug_print(f"session_id from on_poll input: {session_id}")
@@ -115,6 +116,7 @@ class Code42v3OnPoll:
         container_count = param.get("container_count", DEFAULT_CONTAINER_COUNT)
         artifact_count = param.get("artifact_count", DEFAULT_ARTIFACT_COUNT)
 
+        phantom_status = action_result.set_status(phantom.APP_SUCCESS)
         if session_id:
             self._connector.debug_print(f"In handle_on_poll with session_id: {session_id}")
             session_details = self._client.sessions.v1.get_session_details(session_id)
@@ -152,13 +154,6 @@ class Code42v3OnPoll:
 
             added_container_count = 0
             for session in sessions:
-                # skips session if severity is not in severity filter.
-                # if self._get_session_severity_from_scores(session.scores) not in severity_filter_list:
-                #     self._connector.debug_print(
-                #         f"session {session.session_id} severity {self._get_session_severity_from_scores(session.scores)} is not in severity filter {severity_filter_list}, skipping session"
-                #     )
-                #     continue
-
                 last_updated_dt, last_updated_err = self._coerce_to_datetime(session.last_updated)
                 if last_updated_err:
                     self._connector.debug_print(f"error coercing session.last_updated: {last_updated_err}, skipping session")
@@ -315,7 +310,7 @@ class Code42v3OnPoll:
         return {
             "name": session_details.activitySummary,
             "type": session_details.type,
-            "data": session_details.json(),
+            "data": json.loads(session_details.json()),
             "severity": self._normalize_severity(self._get_session_severity_from_scores(session_details.scores)),
             "description": session_details.context_summary,
             "source_data_identifier": session_details.session_id,
@@ -330,7 +325,7 @@ class Code42v3OnPoll:
             "severity": self._normalize_severity(file_event.risk.severity) if file_event.risk.severity else "low",
             "label": file_event.event.detector_display_name,
             "cef": cef,
-            "data": file_event.json(),
+            "data": json.loads(file_event.json()),
             "start_time": file_event.event.ingested.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "source_data_identifier": file_event.event.id,
         }
