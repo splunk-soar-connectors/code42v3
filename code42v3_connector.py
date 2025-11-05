@@ -752,7 +752,6 @@ class Code42V3Connector(BaseConnector):
             response = self._client.actors.v1.update_actor(actor=actor_id, notes=notes, start_date=start_date, end_date=end_date)
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to update actor `{actor_id}`. Error: {e}")
-        action_result.add_data(response.dict())
         return action_result.set_status(phantom.APP_SUCCESS, f"Actor with id {actor_id} updated successfully")
 
     """
@@ -1050,8 +1049,8 @@ class Code42V3Connector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, f"Failed to get watchlist id by name {watchlist_name}. Error: {e!s}")
         if watchlist_id is None:
             return action_result.set_status(phantom.APP_ERROR, f"Watchlist {watchlist_name} not found")
-        action_result.add_data({"watchlist_id": watchlist_id})
-        action_result.update_summary({"watchlist_id": watchlist_id})
+        action_result.add_data({"watchlistId": watchlist_id})
+        action_result.update_summary({"watchlistId": watchlist_id})
         return action_result.set_status(phantom.APP_SUCCESS, f"Successfully got watchlist id by name {watchlist_name}")
 
     def _handle_create_watchlist(self, param, action_result):

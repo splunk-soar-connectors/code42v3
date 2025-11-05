@@ -1287,10 +1287,6 @@
                     "data_type": "string"
                 }
             ],
-            "render": {
-                "type": "custom",
-                "view": "code42v2_view.display_view"
-            },
             "versions": "EQ(*)"
         },
         {
@@ -3399,7 +3395,6 @@
                     "description": "Comma separated list of event IDs to attach",
                     "required": true,
                     "data_type": "string",
-                    "allow_list": true,
                     "order": 1,
                     "contains": [
                         "code42 event id"
@@ -3617,81 +3612,6 @@
             "output": [
                 {
                     "data_path": "action_result.parameter.actor_id",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.actorId",
-                    "data_type": "string",
-                    "contains": [
-                        "code42 actor id"
-                    ]
-                },
-                {
-                    "data_path": "action_result.data.*.name",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.notes",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.active",
-                    "data_type": "boolean"
-                },
-                {
-                    "data_path": "action_result.data.*.startDate",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.endDate",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.alternateNames",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.inScope",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.firstName",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.lastName",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.displayName",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.department",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.title",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.division",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.locality",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.employeeType",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.managerActorId",
-                    "data_type": "string"
-                },
-                {
-                    "data_path": "action_result.data.*.parentActorId",
                     "data_type": "string"
                 },
                 {

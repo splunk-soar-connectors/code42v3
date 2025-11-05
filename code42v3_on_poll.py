@@ -139,15 +139,19 @@ class Code42v3OnPoll:
             self._connector.debug_print(f"start_dt_overlap: {start_dt_overlap}, end_dt: {end_dt}")
 
             sessions = []
-            sessions_iter = self._client.sessions.v1.iter_all(
-                start_time=start_dt_overlap,
-                end_time=end_dt,
-                sort_key=SortKeys.END_TIME,
-                severities=risk_score_filter_list,
-            )
+            try:
+                sessions_iter = self._client.sessions.v1.iter_all(
+                    start_time=start_dt_overlap,
+                    end_time=end_dt,
+                    sort_key=SortKeys.END_TIME,
+                    severities=risk_score_filter_list,
+                )
+            except Exception as e:
+                self._connector.debug_print(f"error iterating sessions: {e}")
+                return action_result.set_status(phantom.APP_ERROR, f"Error iterating sessions: {e}")
 
             # get all sessions and reverse the list to get the oldest sessions first.
-            # SortDirection.ASC is rejecting the request. So we are reversing the list.
+            # sort_direction=SortDirection.ASC in iter_all is rejecting the request. So we are reversing the list.
             for session in sessions_iter:
                 sessions.append(session)
             sessions.reverse()

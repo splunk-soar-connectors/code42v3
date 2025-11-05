@@ -1090,24 +1090,6 @@ PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
 DATA PATH | TYPE | CONTAINS | EXAMPLE VALUES
 --------- | ---- | -------- | --------------
 action_result.parameter.actor_id | string | | |
-action_result.data.\*.actorId | string | `code42 actor id` | |
-action_result.data.\*.name | string | | |
-action_result.data.\*.notes | string | | |
-action_result.data.\*.active | boolean | | |
-action_result.data.\*.startDate | string | | |
-action_result.data.\*.endDate | string | | |
-action_result.data.\*.alternateNames | string | | |
-action_result.data.\*.inScope | string | | |
-action_result.data.\*.firstName | string | | |
-action_result.data.\*.lastName | string | | |
-action_result.data.\*.displayName | string | | |
-action_result.data.\*.department | string | | |
-action_result.data.\*.title | string | | |
-action_result.data.\*.division | string | | |
-action_result.data.\*.locality | string | | |
-action_result.data.\*.employeeType | string | | |
-action_result.data.\*.managerActorId | string | | |
-action_result.data.\*.parentActorId | string | | |
 action_result.parameter.notes | string | | |
 action_result.parameter.start_date | string | | |
 action_result.parameter.end_date | string | | |
