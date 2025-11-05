@@ -13,11 +13,29 @@
 # either express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
 
-# API endpoints
-CODE42V3_CONNECTIVITY_ENDPOINT = "/endpoint/to/test/connectivity"
+# max_results default value
+MAX_RESULTS_DEFAULT = 50
 
-# Error messages
-CODE42V3_ERR_CONNECTIVITY_TEST = "Test Connectivity Failed"
+# results per page
+RESULTS_PER_PAGE = 50
 
-# Success messages
-CODE42V3_SUCC_CONNECTIVITY_TEST = "Test Connectivity Passed"
+# default page size
+PAGE_SIZE = 10000
+
+DEFAULT_CONTAINER_COUNT = 1
+DEFAULT_ARTIFACT_COUNT = 10
+
+
+# integer validation constants
+CODE42V3_VALID_INT_MSG = "Please provide a valid integer value in the '{param}' action parameter"
+CODE42V3_NON_NEG_INT_MSG = "Please provide a valid non-negative integer value in the '{param}' action parameter"
+CODE42V3_NON_NEG_NON_ZERO_INT_MSG = "Please provide a valid non-zero positive integer value in '{param}' action parameter"
+CODE42V3_CASE_NUM_KEY = "case_number"
+CODE42V3_MAX_RESULTS_KEY = "max_results"
+CODE42V3_ROLE_ID_KEY = "role_id"
+
+# value_list validation constants
+CODE42V3_VALUE_LIST_ERR_MSG = "Please provide a valid value in the '{}' action parameter. Expected values are {}"
+
+CODE42V3_CASE_NUM_KEY = "case_number"
+CODE42V3_MAX_RESULTS_KEY = "max_results"
