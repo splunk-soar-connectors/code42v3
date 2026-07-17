@@ -19,7 +19,7 @@ import phantom.app as phantom
 from incydr.enums.file_events import EventAction
 from incydr.enums.sessions import SortKeys
 
-from code42v3_consts import DEFAULT_ARTIFACT_COUNT, DEFAULT_CONTAINER_COUNT
+from code42v3_consts import DEFAULT_ARTIFACT_COUNT, DEFAULT_CONTAINER_COUNT, MAX_POLL_SESSIONS
 
 
 class Code42v3OnPoll:
@@ -152,7 +152,10 @@ class Code42v3OnPoll:
 
             # get all sessions and reverse the list to get the oldest sessions first.
             # sort_direction=SortDirection.ASC in iter_all is rejecting the request. So we are reversing the list.
-            for session in sessions_iter:
+            for index, session in enumerate(sessions_iter):
+                if index >= MAX_POLL_SESSIONS:
+                    self._connector.debug_print(f"session fetch limit of {MAX_POLL_SESSIONS} reached; remaining sessions will be retried")
+                    break
                 sessions.append(session)
             sessions.reverse()
 
@@ -204,7 +207,7 @@ class Code42v3OnPoll:
             return phantom_status
         return phantom_status
 
-    def _get_session_events(self, session_id):
+    def _get_session_events(self, session_id, event_count):
         """
         Gets the events for a given session.
         Args:
@@ -212,15 +215,8 @@ class Code42v3OnPoll:
         Returns:
             list: The events for the session.
         """
-        events = []
         page = self._client.sessions.v1.get_session_events(session_id)
-        events.extend(page.file_events)
-        next_pg_token = page.next_pg_token
-        while next_pg_token:
-            page = self._client.sessions.v1.get_session_events(session_id, pg_token=next_pg_token)
-            events.extend(page.file_events)
-            next_pg_token = page.next_pg_token
-        return events
+        return list(page.file_events[:event_count])
 
     def _get_container_label(self):
         return self._connector.get_config().get("ingest", {}).get("container_label")
@@ -268,7 +264,7 @@ class Code42v3OnPoll:
             return container_id
 
     def _add_new_artifacts_to_container(self, container_id, session_id, artifact_count):
-        file_events = self._get_session_events(session_id)
+        file_events = self._get_session_events(session_id, artifact_count)
         self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
         return container_id
 
