@@ -160,10 +160,14 @@ class Code42v3OnPoll:
             sessions.reverse()
 
             added_container_count = 0
+            checkpoint_blocked = False
             for session in sessions:
                 last_updated_dt, last_updated_err = self._coerce_to_datetime(session.last_updated)
                 if last_updated_err:
                     self._connector.debug_print(f"error coercing session.last_updated: {last_updated_err}, skipping session")
+                    checkpoint_blocked = True
+                    phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                    continue
                 # check if container already exists for the session.
                 container_id = self._connector._get_existing_container_id_for_sdi(session.session_id)
                 if container_id is not None:
@@ -180,6 +184,7 @@ class Code42v3OnPoll:
                         container_id = self._create_or_update_container(session)
                         if container_id is None:
                             phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
+                            checkpoint_blocked = True
                             continue
                         self._add_new_artifacts_to_container(container_id, session.session_id, artifact_count)
                     else:
@@ -193,10 +198,12 @@ class Code42v3OnPoll:
                     container_id = self._create_or_update_container(session)
                     if container_id is None:
                         phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
+                        checkpoint_blocked = True
                         continue
                     added_container_count += 1
                     self._add_new_artifacts_to_container(container_id, session.session_id, artifact_count)
-                    self._save_last_time(session.begin_time)
+                    if not checkpoint_blocked:
+                        self._save_last_time(session.begin_time)
 
                     if added_container_count >= container_count:
                         self._connector.debug_print(
@@ -308,7 +315,7 @@ class Code42v3OnPoll:
 
     def _create_container_payload(self, session_details):
         return {
-            "name": session_details.activitySummary,
+            "name": session_details.activitySummary or f"Code42 session {session_details.session_id}",
             "type": session_details.type,
             "data": json.loads(session_details.json()),
             "severity": self._normalize_severity(self._get_session_severity_from_scores(session_details.scores)),
