@@ -11,7 +11,7 @@
     "fips_compliant": true,
     "product_version_regex": ".*",
     "publisher": "Splunk",
-    "license": "Copyright (c) 2025 Splunk Inc.",
+    "license": "Copyright (c) 2025-2026 Splunk Inc.",
     "app_version": "1.0.0",
     "utctime_updated": "2025-11-05T15:33:37.284870Z",
     "package_name": "phantom_code42v3",
@@ -4389,7 +4389,7 @@
         "wheel": [
             {
                 "module": "boltons",
-                "input_file": "wheels/py3/boltons-25.0.0-py3-none-any.whl"
+                "input_file": "wheels/py3/boltons-26.1.0-py3-none-any.whl"
             },
             {
                 "module": "incydr",
@@ -4401,7 +4401,7 @@
             },
             {
                 "module": "markdown_it_py",
-                "input_file": "wheels/py3/markdown_it_py-4.0.0-py3-none-any.whl"
+                "input_file": "wheels/py3/markdown_it_py-4.2.0-py3-none-any.whl"
             },
             {
                 "module": "mdurl",
@@ -4409,15 +4409,15 @@
             },
             {
                 "module": "pydantic",
-                "input_file": "wheels/py313/pydantic-1.10.24-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+                "input_file": "wheels/py313/pydantic-1.10.26-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
             },
             {
                 "module": "pygments",
-                "input_file": "wheels/py3/pygments-2.19.2-py3-none-any.whl"
+                "input_file": "wheels/py3/pygments-2.20.0-py3-none-any.whl"
             },
             {
                 "module": "python_dotenv",
-                "input_file": "wheels/py3/python_dotenv-1.2.1-py3-none-any.whl"
+                "input_file": "wheels/py3/python_dotenv-1.2.2-py3-none-any.whl"
             },
             {
                 "module": "requests_toolbelt",
@@ -4425,11 +4425,11 @@
             },
             {
                 "module": "rich",
-                "input_file": "wheels/py3/rich-14.2.0-py3-none-any.whl"
+                "input_file": "wheels/py3/rich-15.0.0-py3-none-any.whl"
             },
             {
                 "module": "typing_extensions",
-                "input_file": "wheels/py3/typing_extensions-4.15.0-py3-none-any.whl"
+                "input_file": "wheels/py3/typing_extensions-4.16.0-py3-none-any.whl"
             }
         ]
     },
@@ -4437,7 +4437,7 @@
         "wheel": [
             {
                 "module": "boltons",
-                "input_file": "wheels/py3/boltons-25.0.0-py3-none-any.whl"
+                "input_file": "wheels/py3/boltons-26.1.0-py3-none-any.whl"
             },
             {
                 "module": "incydr",
@@ -4457,11 +4457,11 @@
             },
             {
                 "module": "pydantic",
-                "input_file": "wheels/py39/pydantic-1.10.24-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+                "input_file": "wheels/py39/pydantic-1.10.26-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
             },
             {
                 "module": "pygments",
-                "input_file": "wheels/py3/pygments-2.19.2-py3-none-any.whl"
+                "input_file": "wheels/py3/pygments-2.20.0-py3-none-any.whl"
             },
             {
                 "module": "python_dotenv",
@@ -4473,11 +4473,11 @@
             },
             {
                 "module": "rich",
-                "input_file": "wheels/py3/rich-14.2.0-py3-none-any.whl"
+                "input_file": "wheels/py3/rich-15.0.0-py3-none-any.whl"
             },
             {
                 "module": "typing_extensions",
-                "input_file": "wheels/py3/typing_extensions-4.15.0-py3-none-any.whl"
+                "input_file": "wheels/py3/typing_extensions-4.16.0-py3-none-any.whl"
             }
         ]
     }
