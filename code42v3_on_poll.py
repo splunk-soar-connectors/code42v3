@@ -150,14 +150,15 @@ class Code42v3OnPoll:
                 self._connector.debug_print(f"error iterating sessions: {e}")
                 return action_result.set_status(phantom.APP_ERROR, f"Error iterating sessions: {e}")
 
-            # get all sessions and reverse the list to get the oldest sessions first.
-            # sort_direction=SortDirection.ASC in iter_all is rejecting the request. So we are reversing the list.
-            for index, session in enumerate(sessions_iter):
-                if index >= MAX_POLL_SESSIONS:
-                    self._connector.debug_print(f"session fetch limit of {MAX_POLL_SESSIONS} reached; remaining sessions will be retried")
-                    break
-                sessions.append(session)
+            # Get all sessions and reverse the list to get the oldest sessions first.
+            # sort_direction=SortDirection.ASC in iter_all is rejecting the request.
+            # Apply the processing cap only after oldest-first ordering is established,
+            # so the checkpoint cannot advance past older unprocessed sessions.
+            sessions = list(sessions_iter)
             sessions.reverse()
+            if len(sessions) > MAX_POLL_SESSIONS:
+                self._connector.debug_print(f"session processing limit of {MAX_POLL_SESSIONS} reached; remaining sessions will be retried")
+                sessions = sessions[:MAX_POLL_SESSIONS]
 
             added_container_count = 0
             checkpoint_blocked = False
