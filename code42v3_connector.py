@@ -52,7 +52,10 @@ class Code42UnsupportedHashError(Exception):
 
 
 def _quote_path_segment(value):
-    return urllib.parse.quote(str(value), safe="")
+    if not isinstance(value, str) or not value or value in {".", ".."}:
+        raise ValueError("Path identifiers must be non-empty strings and cannot be dot segments")
+
+    return urllib.parse.quote(value, safe="")
 
 
 class Code42V3Connector(BaseConnector):
