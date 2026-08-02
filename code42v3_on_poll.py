@@ -202,7 +202,13 @@ class Code42v3OnPoll:
                             phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
                             checkpoint_blocked = True
                             continue
-                        self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+                        try:
+                            self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+                        except Exception as e:
+                            self._connector.debug_print(f"error saving artifacts for session {session.session_id}: {e}")
+                            phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                            checkpoint_blocked = True
+                            continue
                     else:
                         self._connector.debug_print(
                             f"container update time {container_update_dt} is after last updated time {last_updated_dt}, skipping container {container_id}"
@@ -223,7 +229,13 @@ class Code42v3OnPoll:
                         checkpoint_blocked = True
                         continue
                     added_container_count += 1
-                    self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+                    try:
+                        self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+                    except Exception as e:
+                        self._connector.debug_print(f"error saving artifacts for session {session.session_id}: {e}")
+                        phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                        checkpoint_blocked = True
+                        continue
                 if not checkpoint_blocked:
                     self._save_last_time(session.begin_time)
 
@@ -419,13 +431,19 @@ class Code42v3OnPoll:
         if len(artifacts) == 0:
             self._connector.debug_print("no artifacts to save")
             return
-        self._connector.save_artifacts(artifacts)
+        saved_successfully, message, _ = self._connector.save_artifacts(artifacts)
+        if not saved_successfully:
+            raise RuntimeError(f"Error saving artifacts: {message}")
 
     def _create_or_update_container(self, session_details):
         container_id = self._connector._get_existing_container_id_for_sdi(session_details.session_id)
         if container_id:
             severity_score = self._normalize_severity(self._get_session_severity_from_scores(session_details.scores))
-            self._connector._update_container(container_id, session_details.dict(), severity_score)
+            try:
+                self._connector._update_container(container_id, session_details.dict(), severity_score)
+            except Exception as e:
+                self._connector.debug_print(f"error updating container: {e}")
+                return None
             return container_id
         else:
             container_json = self._create_container_payload(session_details)

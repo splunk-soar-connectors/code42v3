@@ -159,12 +159,13 @@ class Code42V3Connector(BaseConnector):
             "severity": severity,
         }
         try:
-            requests.post(
+            response = requests.post(
                 f"{self.get_phantom_base_url()}rest/container/{container_id}",
                 data=json.dumps(container_metadata),
                 verify=get_verify_ssl_setting(),
                 timeout=30,
             )
+            response.raise_for_status()
         except Exception as e:
             raise RuntimeError("Encountered an error updating container metadata.") from e
 
