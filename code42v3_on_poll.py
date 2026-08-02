@@ -12,14 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import dateutil.parser
 import phantom.app as phantom
+import requests
 from incydr.enums.file_events import EventAction
 from incydr.enums.sessions import SortKeys
+from incydr.models import FileEventsPage, SessionsPage
 
-from code42v3_consts import DEFAULT_ARTIFACT_COUNT, DEFAULT_CONTAINER_COUNT, MAX_POLL_SESSIONS
+from code42v3_consts import (
+    DEFAULT_ARTIFACT_COUNT,
+    DEFAULT_CONTAINER_COUNT,
+    MAX_POLL_EVENT_PAGES,
+    MAX_POLL_EVENTS,
+    MAX_POLL_RESPONSE_BYTES,
+    MAX_POLL_SESSIONS,
+    MAX_POLL_TOTAL_RESPONSE_BYTES,
+    POLL_SESSION_PAGE_SIZE,
+    POLL_WINDOW_SEARCH_STEPS,
+)
 
 
 class Code42v3OnPoll:
@@ -27,6 +40,7 @@ class Code42v3OnPoll:
         self._connector = connector
         self._client = client
         self._state = state or {}
+        self._poll_response_bytes = 0
 
     def _get_date_parameters(self):
         # returns start date and end date for the poll.
@@ -115,16 +129,18 @@ class Code42v3OnPoll:
             return action_result.set_status(phantom.APP_ERROR, "Invalid severity filter. Expected values are: low, medium, high, critical")
         container_count = param.get("container_count", DEFAULT_CONTAINER_COUNT)
         artifact_count = param.get("artifact_count", DEFAULT_ARTIFACT_COUNT)
+        self._poll_response_bytes = 0
 
         phantom_status = action_result.set_status(phantom.APP_SUCCESS)
         if session_id:
             self._connector.debug_print(f"In handle_on_poll with session_id: {session_id}")
             session_details = self._client.sessions.v1.get_session_details(session_id)
+            file_events = self._get_session_events(session_details.session_id, artifact_count)
             container_id = self._create_or_update_container(session_details)
             if container_id is None:
                 phantom_status = action_result.set_status(phantom.APP_ERROR, "Error creating or updating container(s)")
                 return phantom_status
-            self._add_new_artifacts_to_container(container_id, session_details.session_id, artifact_count)
+            self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
         else:
             start_dt, end_dt, dt_error = self._get_date_parameters()
             if dt_error:
@@ -173,83 +189,176 @@ class Code42v3OnPoll:
                         self._connector.debug_print(
                             f"container update time {container_update_dt} is before last updated time {last_updated_dt}, updating container {container_id}"
                         )
+                        try:
+                            file_events = self._get_session_events(session.session_id, artifact_count)
+                        except Exception as e:
+                            self._connector.debug_print(f"error retrieving events for session {session.session_id}: {e}")
+                            phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                            checkpoint_blocked = True
+                            continue
                         container_id = self._create_or_update_container(session)
                         if container_id is None:
                             phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
                             checkpoint_blocked = True
                             continue
-                        self._add_new_artifacts_to_container(container_id, session.session_id, artifact_count)
+                        self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
                     else:
                         self._connector.debug_print(
                             f"container update time {container_update_dt} is after last updated time {last_updated_dt}, skipping container {container_id}"
                         )
-                        continue
                 else:
                     # if container does not exist, create a new container with session details.
                     self._connector.debug_print(f"container does not exist for session {session.session_id}, creating new container")
+                    try:
+                        file_events = self._get_session_events(session.session_id, artifact_count)
+                    except Exception as e:
+                        self._connector.debug_print(f"error retrieving events for session {session.session_id}: {e}")
+                        phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                        checkpoint_blocked = True
+                        continue
                     container_id = self._create_or_update_container(session)
                     if container_id is None:
                         phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
                         checkpoint_blocked = True
                         continue
                     added_container_count += 1
-                    self._add_new_artifacts_to_container(container_id, session.session_id, artifact_count)
-                    if not checkpoint_blocked:
-                        self._save_last_time(session.begin_time)
+                    self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+                if not checkpoint_blocked:
+                    self._save_last_time(session.begin_time)
 
-                    if added_container_count >= container_count:
-                        self._connector.debug_print(
-                            f"container count {added_container_count} is greater than or equal to container count {container_count}, breaking out of loop"
-                        )
-                        break
+                if added_container_count >= container_count:
+                    self._connector.debug_print(
+                        f"container count {added_container_count} is greater than or equal to container count {container_count}, breaking out of loop"
+                    )
+                    break
 
             return phantom_status
         return phantom_status
 
-    def _get_bounded_sessions(self, start_time, end_time, severities):
-        """Retrieve at most ``MAX_POLL_SESSIONS`` in oldest-first order."""
-        page_size = 50
-        first_page = self._client.sessions.v1.get_page(
-            start_time=start_time,
-            end_time=end_time,
-            sort_key=SortKeys.END_TIME,
-            severities=severities,
-            page_num=0,
-            page_size=page_size,
+    def _get_bounded_json(self, path, params=None):
+        """Download and decode one response within per-response and per-poll byte limits."""
+        session = self._client.session
+        request = requests.Request("GET", session.create_url(path), params=params)
+        prepared = session.prepare_request(request)
+        prepared.hooks["response"] = []
+        environment = session.merge_environment_settings(prepared.url, {}, True, None, None)
+        response = session.send(prepared, timeout=(10, 60), **environment)
+        try:
+            response.raise_for_status()
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > MAX_POLL_RESPONSE_BYTES:
+                raise ValueError(f"Response exceeded the {MAX_POLL_RESPONSE_BYTES}-byte limit")
+
+            chunks = []
+            response_bytes = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                response_bytes += len(chunk)
+                self._poll_response_bytes += len(chunk)
+                if response_bytes > MAX_POLL_RESPONSE_BYTES:
+                    raise ValueError(f"Response exceeded the {MAX_POLL_RESPONSE_BYTES}-byte limit")
+                if self._poll_response_bytes > MAX_POLL_TOTAL_RESPONSE_BYTES:
+                    raise ValueError(f"Poll responses exceeded the {MAX_POLL_TOTAL_RESPONSE_BYTES}-byte limit")
+                chunks.append(chunk)
+            return json.loads(b"".join(chunks))
+        finally:
+            response.close()
+
+    @staticmethod
+    def _session_query_params(start_time, end_time, severities, page_num):
+        return {
+            "on_or_after": start_time.timestamp() * 1000,
+            "before": end_time.timestamp() * 1000,
+            "has_alerts": "true",
+            "order_by": SortKeys.END_TIME.value,
+            "severity": severities,
+            "page_number": page_num,
+            "page_size": POLL_SESSION_PAGE_SIZE,
+        }
+
+    def _get_sessions_page(self, start_time, end_time, severities, page_num):
+        data = self._get_bounded_json(
+            "/v1/sessions",
+            params=self._session_query_params(start_time, end_time, severities, page_num),
         )
-        total_count = max(first_page.total_count or 0, len(first_page.items))
-        if not total_count:
-            return [], False
+        page = SessionsPage.parse_obj(data)
+        items = page.items or []
+        if page.total_count is None or page.total_count < 0:
+            raise ValueError("Session response did not contain a valid totalCount")
+        if len(items) > POLL_SESSION_PAGE_SIZE or page.total_count < len(items):
+            raise ValueError("Session response was inconsistent with the requested page size or totalCount")
+        page.items = items
+        return page
 
-        last_page_num = (total_count - 1) // page_size
-        max_page_requests = (MAX_POLL_SESSIONS // page_size) + 1
-        sessions = []
+    def _select_session_window(self, start_time, end_time, severities):
+        page = self._get_sessions_page(start_time, end_time, severities, 0)
+        if page.total_count <= MAX_POLL_SESSIONS:
+            return end_time, page, False
 
-        # The API rejects ascending session queries. Walk descending result pages
-        # from the oldest page toward page zero so a checkpoint never skips older
-        # sessions, while keeping both requests and accumulated objects bounded.
-        for page_offset in range(max_page_requests):
-            page_num = last_page_num - page_offset
-            if page_num < 0:
+        low = start_time
+        high = end_time
+        selected = None
+        for _ in range(POLL_WINDOW_SEARCH_STEPS):
+            if (high - low).total_seconds() <= 0.001:
                 break
+            candidate_end = low + ((high - low) / 2)
+            candidate_page = self._get_sessions_page(start_time, candidate_end, severities, 0)
+            if candidate_page.total_count > MAX_POLL_SESSIONS:
+                high = candidate_end
+            else:
+                low = candidate_end
+                selected = (candidate_end, candidate_page)
+
+        if selected is None or selected[1].total_count == 0:
+            raise ValueError("Unable to select a non-empty session window within the polling limit")
+        return selected[0], selected[1], True
+
+    def _collect_session_window(self, start_time, end_time, severities, expected_count, first_page=None):
+        if expected_count == 0:
+            return []
+
+        page_count = (expected_count + POLL_SESSION_PAGE_SIZE - 1) // POLL_SESSION_PAGE_SIZE
+        sessions = []
+        seen_ids = set()
+        for page_num in range(page_count):
             page = (
-                first_page
-                if page_num == 0
-                else self._client.sessions.v1.get_page(
-                    start_time=start_time,
-                    end_time=end_time,
-                    sort_key=SortKeys.END_TIME,
-                    severities=severities,
-                    page_num=page_num,
-                    page_size=page_size,
-                )
+                first_page if page_num == 0 and first_page is not None else self._get_sessions_page(start_time, end_time, severities, page_num)
             )
-            for session in reversed(page.items):
-                if len(sessions) >= MAX_POLL_SESSIONS:
-                    return sessions, True
+            if page.total_count != expected_count:
+                raise ValueError("Session totalCount changed during pagination")
+            expected_page_size = min(POLL_SESSION_PAGE_SIZE, expected_count - len(sessions))
+            if len(page.items) != expected_page_size:
+                raise ValueError("Session page did not contain the expected number of items")
+            for session in page.items:
+                if not session.session_id or session.session_id in seen_ids:
+                    raise ValueError("Session pagination did not make unique progress")
+                seen_ids.add(session.session_id)
                 sessions.append(session)
 
-        return sessions, total_count > len(sessions)
+        sentinel = self._get_sessions_page(start_time, end_time, severities, page_count)
+        if sentinel.total_count != expected_count or sentinel.items:
+            raise ValueError("Session pagination returned data beyond the declared totalCount")
+        return sessions
+
+    def _session_begin_sort_key(self, session):
+        begin_time, error = self._coerce_to_datetime(session.begin_time)
+        if error or begin_time is None:
+            raise ValueError(f"Session {session.session_id} did not contain a valid begin time")
+        return begin_time, session.session_id
+
+    def _get_bounded_sessions(self, start_time, end_time, severities):
+        """Retrieve a stable, bounded oldest begin-time window without trusting one offset pass."""
+        window_end, first_page, limited_window = self._select_session_window(start_time, end_time, severities)
+        expected_count = first_page.total_count
+        first_pass = self._collect_session_window(start_time, window_end, severities, expected_count, first_page)
+        first_ids = tuple(session.session_id for session in first_pass)
+        del first_pass
+        second_pass = self._collect_session_window(start_time, window_end, severities, expected_count)
+        if tuple(session.session_id for session in second_pass) != first_ids:
+            raise ValueError("Session pagination changed between verification passes")
+        second_pass.sort(key=self._session_begin_sort_key)
+        return second_pass, limited_window
 
     def _get_session_events(self, session_id, event_count):
         """
@@ -259,8 +368,27 @@ class Code42v3OnPoll:
         Returns:
             list: The events for the session.
         """
-        page = self._client.sessions.v1.get_session_events(session_id)
-        return list(page.file_events[:event_count])
+        if event_count > MAX_POLL_EVENTS:
+            raise ValueError(f"artifact_count cannot exceed {MAX_POLL_EVENTS}")
+
+        session_id = urllib.parse.quote(str(session_id), safe="")
+        path = f"/v1/sessions/{session_id}/events"
+        events = []
+        next_token = None
+        seen_tokens = set()
+        for _ in range(MAX_POLL_EVENT_PAGES):
+            params = {"pgToken": next_token} if next_token else None
+            data = self._get_bounded_json(path, params=params)
+            page = FileEventsPage.parse_obj(data.get("queryResult"))
+            events.extend((page.file_events or [])[: event_count - len(events)])
+            if len(events) >= event_count or not page.next_pg_token:
+                return events
+            if page.next_pg_token in seen_tokens:
+                raise ValueError("Event pagination token did not make progress")
+            seen_tokens.add(page.next_pg_token)
+            next_token = page.next_pg_token
+
+        raise ValueError(f"Event pagination exceeded {MAX_POLL_EVENT_PAGES} pages")
 
     def _get_container_label(self):
         return self._connector.get_config().get("ingest", {}).get("container_label")
@@ -306,11 +434,6 @@ class Code42v3OnPoll:
                 return None
             self._connector.debug_print(f"container created with id: {container_id}")
             return container_id
-
-    def _add_new_artifacts_to_container(self, container_id, session_id, artifact_count):
-        file_events = self._get_session_events(session_id, artifact_count)
-        self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
-        return container_id
 
     @staticmethod
     def _get_risk_score_from_sevirity(severity):
