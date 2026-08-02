@@ -20,7 +20,7 @@ import phantom.app as phantom
 import requests
 from incydr.enums.file_events import EventAction
 from incydr.enums.sessions import SortKeys
-from incydr.models import FileEventsPage, SessionsPage
+from incydr.models import FileEventsPage, Session, SessionsPage
 
 from code42v3_consts import (
     DEFAULT_ARTIFACT_COUNT,
@@ -134,7 +134,8 @@ class Code42v3OnPoll:
         phantom_status = action_result.set_status(phantom.APP_SUCCESS)
         if session_id:
             self._connector.debug_print(f"In handle_on_poll with session_id: {session_id}")
-            session_details = self._client.sessions.v1.get_session_details(session_id)
+            session_id = urllib.parse.quote(str(session_id), safe="")
+            session_details = Session.parse_obj(self._get_bounded_json(f"/v1/sessions/{session_id}"))
             file_events = self._get_session_events(session_details.session_id, artifact_count)
             container_id = self._create_or_update_container(session_details)
             if container_id is None:
