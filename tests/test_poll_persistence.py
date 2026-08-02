@@ -23,7 +23,7 @@ class PollPersistenceTest(unittest.TestCase):
         connector = Mock()
         connector.artifact_exists.return_value = False
         connector.save_artifacts.return_value = (False, "write failed", None)
-        poller = Code42v3OnPoll(connector, Mock())
+        poller = Code42v3OnPoll(connector, Mock(), {})
         poller._create_artifact_payload = Mock(return_value={"source_data_identifier": "event-1"})
         event = Mock()
         event.event.id = "event-1"
