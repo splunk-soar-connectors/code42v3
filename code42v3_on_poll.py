@@ -138,27 +138,18 @@ class Code42v3OnPoll:
             start_dt_overlap = start_dt - timedelta(hours=overlap_hours)
             self._connector.debug_print(f"start_dt_overlap: {start_dt_overlap}, end_dt: {end_dt}")
 
-            sessions = []
             try:
-                sessions_iter = self._client.sessions.v1.iter_all(
+                sessions, session_limit_reached = self._get_bounded_sessions(
                     start_time=start_dt_overlap,
                     end_time=end_dt,
-                    sort_key=SortKeys.END_TIME,
                     severities=risk_score_filter_list,
                 )
             except Exception as e:
-                self._connector.debug_print(f"error iterating sessions: {e}")
-                return action_result.set_status(phantom.APP_ERROR, f"Error iterating sessions: {e}")
+                self._connector.debug_print(f"error retrieving sessions: {e}")
+                return action_result.set_status(phantom.APP_ERROR, f"Error retrieving sessions: {e}")
 
-            # Get all sessions and reverse the list to get the oldest sessions first.
-            # sort_direction=SortDirection.ASC in iter_all is rejecting the request.
-            # Apply the processing cap only after oldest-first ordering is established,
-            # so the checkpoint cannot advance past older unprocessed sessions.
-            sessions = list(sessions_iter)
-            sessions.reverse()
-            if len(sessions) > MAX_POLL_SESSIONS:
+            if session_limit_reached:
                 self._connector.debug_print(f"session processing limit of {MAX_POLL_SESSIONS} reached; remaining sessions will be retried")
-                sessions = sessions[:MAX_POLL_SESSIONS]
 
             added_container_count = 0
             checkpoint_blocked = False
@@ -214,6 +205,51 @@ class Code42v3OnPoll:
 
             return phantom_status
         return phantom_status
+
+    def _get_bounded_sessions(self, start_time, end_time, severities):
+        """Retrieve at most ``MAX_POLL_SESSIONS`` in oldest-first order."""
+        page_size = 50
+        first_page = self._client.sessions.v1.get_page(
+            start_time=start_time,
+            end_time=end_time,
+            sort_key=SortKeys.END_TIME,
+            severities=severities,
+            page_num=0,
+            page_size=page_size,
+        )
+        total_count = max(first_page.total_count or 0, len(first_page.items))
+        if not total_count:
+            return [], False
+
+        last_page_num = (total_count - 1) // page_size
+        max_page_requests = (MAX_POLL_SESSIONS // page_size) + 1
+        sessions = []
+
+        # The API rejects ascending session queries. Walk descending result pages
+        # from the oldest page toward page zero so a checkpoint never skips older
+        # sessions, while keeping both requests and accumulated objects bounded.
+        for page_offset in range(max_page_requests):
+            page_num = last_page_num - page_offset
+            if page_num < 0:
+                break
+            page = (
+                first_page
+                if page_num == 0
+                else self._client.sessions.v1.get_page(
+                    start_time=start_time,
+                    end_time=end_time,
+                    sort_key=SortKeys.END_TIME,
+                    severities=severities,
+                    page_num=page_num,
+                    page_size=page_size,
+                )
+            )
+            for session in reversed(page.items):
+                if len(sessions) >= MAX_POLL_SESSIONS:
+                    return sessions, True
+                sessions.append(session)
+
+        return sessions, total_count > len(sessions)
 
     def _get_session_events(self, session_id, event_count):
         """
