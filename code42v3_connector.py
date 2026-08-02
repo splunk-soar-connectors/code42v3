@@ -137,6 +137,7 @@ class Code42V3Connector(BaseConnector):
         # Make rest call
         try:
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
+            response.raise_for_status()
         except Exception as e:
             raise RuntimeError("Encountered an error getting the existing container ID from Phantom.") from e
 
@@ -185,8 +186,9 @@ class Code42V3Connector(BaseConnector):
         try:
             self.debug_print(f"Making request on url: {url}")
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
-        except Exception:
-            return None
+            response.raise_for_status()
+        except Exception as e:
+            raise RuntimeError("Encountered an error checking for an existing artifact.") from e
         # return id or None
         if response.json().get("data", None):
             return response.json().get("data", None)[0].get("id", None)
@@ -219,9 +221,10 @@ class Code42V3Connector(BaseConnector):
         url = f"{self.get_phantom_base_url()}rest/container/{container_id}"
         try:
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)  # nosemgrep
-        except Exception:
-            return None
-        return response.json()
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise RuntimeError("Encountered an error getting container metadata.") from e
 
     # test connectivity
     def _handle_test_connectivity(self, param, action_result):

@@ -178,11 +178,23 @@ class Code42v3OnPoll:
                     phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
                     continue
                 # check if container already exists for the session.
-                container_id = self._connector._get_existing_container_id_for_sdi(session.session_id)
+                try:
+                    container_id = self._connector._get_existing_container_id_for_sdi(session.session_id)
+                except Exception as e:
+                    self._connector.debug_print(f"error checking for an existing container for session {session.session_id}: {e}")
+                    phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                    checkpoint_blocked = True
+                    continue
                 if container_id is not None:
                     self._connector.debug_print(f"container id: {container_id} found for session {session.session_id}")
-                    # if true, and if container update time is after last updated time, update the container again with new session details.
-                    container_metadata = self._connector._get_container(container_id)
+                    try:
+                        container_metadata = self._connector._get_container(container_id)
+                        file_events = self._get_session_events(session.session_id, artifact_count)
+                    except Exception as e:
+                        self._connector.debug_print(f"error reconciling existing session {session.session_id}: {e}")
+                        phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                        checkpoint_blocked = True
+                        continue
                     container_update_dt, container_update_err = self._coerce_to_datetime(container_metadata.get("container_update_time", None))
                     if container_update_err:
                         container_update_dt = None
@@ -190,29 +202,22 @@ class Code42v3OnPoll:
                         self._connector.debug_print(
                             f"container update time {container_update_dt} is before last updated time {last_updated_dt}, updating container {container_id}"
                         )
-                        try:
-                            file_events = self._get_session_events(session.session_id, artifact_count)
-                        except Exception as e:
-                            self._connector.debug_print(f"error retrieving events for session {session.session_id}: {e}")
-                            phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
-                            checkpoint_blocked = True
-                            continue
                         container_id = self._create_or_update_container(session)
                         if container_id is None:
                             phantom_status = action_result.set_status(phantom.APP_ERROR, "error creating or updating container(s)")
                             checkpoint_blocked = True
                             continue
-                        try:
-                            self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
-                        except Exception as e:
-                            self._connector.debug_print(f"error saving artifacts for session {session.session_id}: {e}")
-                            phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
-                            checkpoint_blocked = True
-                            continue
                     else:
                         self._connector.debug_print(
-                            f"container update time {container_update_dt} is after last updated time {last_updated_dt}, skipping container {container_id}"
+                            f"container update time {container_update_dt} is after last updated time {last_updated_dt}, reconciling artifacts only"
                         )
+                    try:
+                        self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+                    except Exception as e:
+                        self._connector.debug_print(f"error saving artifacts for session {session.session_id}: {e}")
+                        phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                        checkpoint_blocked = True
+                        continue
                 else:
                     # if container does not exist, create a new container with session details.
                     self._connector.debug_print(f"container does not exist for session {session.session_id}, creating new container")
