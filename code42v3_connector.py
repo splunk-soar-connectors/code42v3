@@ -51,11 +51,15 @@ class Code42UnsupportedHashError(Exception):
         super().__init__("Unsupported hash format. Hash must sha256")
 
 
-def _quote_path_segment(value):
+def _validate_identifier(value):
     if not isinstance(value, str) or not value or value in {".", ".."}:
         raise ValueError("Path identifiers must be non-empty strings and cannot be dot segments")
 
-    return urllib.parse.quote(value, safe="")
+    return value
+
+
+def _quote_path_segment(value):
+    return urllib.parse.quote(_validate_identifier(value), safe="")
 
 
 class Code42V3Connector(BaseConnector):
@@ -619,7 +623,8 @@ class Code42V3Connector(BaseConnector):
 
         user_id = param.get("user_id").strip()
         try:
-            user = self._client.users.v1.get_user(_quote_path_segment(user_id))
+            user_id = _validate_identifier(user_id)
+            user = self._client.users.v1.get_user(user_id if "@" in user_id else _quote_path_segment(user_id))
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to get user {user_id}. Error: {e!s}")
         action_result.add_data(json.loads(user.json()))
@@ -715,7 +720,9 @@ class Code42V3Connector(BaseConnector):
         name = param.get("name")
         prefer_parent = param.get("prefer_parent")
         try:
-            actor = self._client.actors.v1.get_actor_by_name(name=_quote_path_segment(name), prefer_parent=prefer_parent)
+            name = _validate_identifier(name)
+            actor_name = _quote_path_segment(name) if prefer_parent else name
+            actor = self._client.actors.v1.get_actor_by_name(name=actor_name, prefer_parent=prefer_parent)
             action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
