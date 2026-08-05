@@ -1,6 +1,6 @@
 # File: code42v3_consts.py
 #
-# Copyright (c) 2025 Splunk Inc.
+# Copyright (c) 2025-2026 Splunk Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,13 @@ PAGE_SIZE = 10000
 
 DEFAULT_CONTAINER_COUNT = 1
 DEFAULT_ARTIFACT_COUNT = 10
+MAX_POLL_SESSIONS = 10000
+MAX_POLL_EVENTS = 10000
+MAX_POLL_EVENT_PAGES = 200
+MAX_POLL_RESPONSE_BYTES = 10 * 1024 * 1024
+MAX_POLL_TOTAL_RESPONSE_BYTES = 100 * 1024 * 1024
+POLL_SESSION_PAGE_SIZE = 50
+POLL_WINDOW_SEARCH_STEPS = 48
 
 
 # integer validation constants

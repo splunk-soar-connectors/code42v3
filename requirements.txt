@@ -1,1 +1,9 @@
+boltons==25.0.0
 incydr==2.6.0
+markdown-it-py==3.0.0; python_version < "3.13"
+markdown-it-py==4.0.0; python_version >= "3.13"
+pydantic==1.10.24
+pygments==2.19.2
+python-dotenv==1.2.1
+rich==14.2.0
+typing-extensions==4.15.0

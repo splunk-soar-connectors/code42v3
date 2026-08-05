@@ -1,6 +1,6 @@
 # File: code42v3_connector.py
 #
-# Copyright (c) 2025 Splunk Inc.
+# Copyright (c) 2025-2026 Splunk Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 # and limitations under the License.
 import json
 import os
+import urllib.parse
 from datetime import datetime
 
 # Incydr imports
@@ -48,6 +49,17 @@ from code42v3_on_poll import Code42v3OnPoll
 class Code42UnsupportedHashError(Exception):
     def __init__(self):
         super().__init__("Unsupported hash format. Hash must sha256")
+
+
+def _validate_identifier(value):
+    if not isinstance(value, str) or not value or value in {".", ".."}:
+        raise ValueError("Path identifiers must be non-empty strings and cannot be dot segments")
+
+    return value
+
+
+def _quote_path_segment(value):
+    return urllib.parse.quote(_validate_identifier(value), safe="")
 
 
 class Code42V3Connector(BaseConnector):
@@ -125,6 +137,7 @@ class Code42V3Connector(BaseConnector):
         # Make rest call
         try:
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
+            response.raise_for_status()
         except Exception as e:
             raise RuntimeError("Encountered an error getting the existing container ID from Phantom.") from e
 
@@ -147,12 +160,13 @@ class Code42V3Connector(BaseConnector):
             "severity": severity,
         }
         try:
-            requests.post(
+            response = requests.post(
                 f"{self.get_phantom_base_url()}rest/container/{container_id}",
                 data=json.dumps(container_metadata),
                 verify=get_verify_ssl_setting(),
                 timeout=30,
             )
+            response.raise_for_status()
         except Exception as e:
             raise RuntimeError("Encountered an error updating container metadata.") from e
 
@@ -172,8 +186,9 @@ class Code42V3Connector(BaseConnector):
         try:
             self.debug_print(f"Making request on url: {url}")
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
-        except Exception:
-            return None
+            response.raise_for_status()
+        except Exception as e:
+            raise RuntimeError("Encountered an error checking for an existing artifact.") from e
         # return id or None
         if response.json().get("data", None):
             return response.json().get("data", None)[0].get("id", None)
@@ -206,9 +221,10 @@ class Code42V3Connector(BaseConnector):
         url = f"{self.get_phantom_base_url()}rest/container/{container_id}"
         try:
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)  # nosemgrep
-        except Exception:
-            return None
-        return response.json()
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise RuntimeError("Encountered an error getting container metadata.") from e
 
     # test connectivity
     def _handle_test_connectivity(self, param, action_result):
@@ -234,7 +250,7 @@ class Code42V3Connector(BaseConnector):
         self.save_progress("Getting session details")
         session_id = param.get("session_id")
         try:
-            session_details = self._client.sessions.v1.get_session_details(session_id)
+            session_details = self._client.sessions.v1.get_session_details(_quote_path_segment(session_id))
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to get session details for {session_id}. Error: {e!s}")
         action_result.add_data(session_details.dict())
@@ -611,7 +627,8 @@ class Code42V3Connector(BaseConnector):
 
         user_id = param.get("user_id").strip()
         try:
-            user = self._client.users.v1.get_user(user_id)
+            user_id = _validate_identifier(user_id)
+            user = self._client.users.v1.get_user(user_id if "@" in user_id else _quote_path_segment(user_id))
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to get user {user_id}. Error: {e!s}")
         action_result.add_data(json.loads(user.json()))
@@ -683,7 +700,7 @@ class Code42V3Connector(BaseConnector):
         actor_id = param.get("actor_id").strip()
         prefer_parent = param.get("prefer_parent")
         try:
-            actor = self._client.actors.v1.get_actor_by_id(actor_id=actor_id, prefer_parent=prefer_parent)
+            actor = self._client.actors.v1.get_actor_by_id(actor_id=_quote_path_segment(actor_id), prefer_parent=prefer_parent)
             action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
@@ -707,7 +724,9 @@ class Code42V3Connector(BaseConnector):
         name = param.get("name")
         prefer_parent = param.get("prefer_parent")
         try:
-            actor = self._client.actors.v1.get_actor_by_name(name=name, prefer_parent=prefer_parent)
+            name = _validate_identifier(name)
+            actor_name = _quote_path_segment(name) if prefer_parent else name
+            actor = self._client.actors.v1.get_actor_by_name(name=actor_name, prefer_parent=prefer_parent)
             action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
