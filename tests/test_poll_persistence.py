@@ -20,6 +20,7 @@ import phantom.app as phantom
 
 from code42v3_connector import Code42V3Connector
 from code42v3_on_poll import Code42v3OnPoll
+from code42v3_utils import _quote_path_segment
 
 
 class PollPersistenceTest(unittest.TestCase):
@@ -147,6 +148,58 @@ class PollPersistenceTest(unittest.TestCase):
 
         self.assertEqual(status, phantom.APP_ERROR)
         poller._save_last_time.assert_not_called()
+
+    def test_path_segment_policy_rejects_empty_and_dot_segments(self):
+        for session_id in ("", ".", ".."):
+            with self.subTest(session_id=session_id):
+                with self.assertRaisesRegex(ValueError, "non-empty strings"):
+                    _quote_path_segment(session_id)
+
+    def test_path_segment_policy_encodes_separators_and_encoded_traversal(self):
+        self.assertEqual(_quote_path_segment("session/id"), "session%2Fid")
+        self.assertEqual(_quote_path_segment("%2e%2e"), "%252e%252e")
+
+    def test_source_id_uses_path_segment_policy(self):
+        connector = Mock()
+        connector.get_config.return_value = {"severity_filter": "low"}
+        action_result = Mock()
+        action_result.set_status.side_effect = lambda status, *_args: status
+        poller = Code42v3OnPoll(connector, Mock(), {})
+        poller._get_bounded_json = Mock(return_value={})
+        poller._get_session_events = Mock(return_value=[])
+        poller._create_or_update_container = Mock(return_value=1)
+        poller._save_artifacts_from_file_event = Mock()
+
+        for session_id in ("", ".", ".."):
+            with self.subTest(session_id=session_id):
+                status = poller.handle_on_poll({"source_id": session_id}, action_result)
+                self.assertEqual(status, phantom.APP_ERROR)
+        poller._get_bounded_json.assert_not_called()
+
+        with patch("code42v3_on_poll.Session.parse_obj", return_value=self._session("returned-session")):
+            for session_id, encoded_session_id in (("session/id", "session%2Fid"), ("%2e%2e", "%252e%252e")):
+                with self.subTest(session_id=session_id):
+                    poller._get_bounded_json.reset_mock()
+                    poller.handle_on_poll({"source_id": session_id}, action_result)
+                    poller._get_bounded_json.assert_called_once_with(f"/v1/sessions/{encoded_session_id}")
+
+    @patch("code42v3_on_poll.FileEventsPage.parse_obj")
+    def test_api_session_id_uses_path_segment_policy(self, parse_page):
+        parse_page.return_value = SimpleNamespace(file_events=[], next_pg_token=None)
+        poller = Code42v3OnPoll(Mock(), Mock(), {})
+        poller._get_bounded_json = Mock(return_value={"queryResult": {}})
+
+        for session_id in ("", ".", ".."):
+            with self.subTest(session_id=session_id):
+                with self.assertRaisesRegex(ValueError, "non-empty strings"):
+                    poller._get_session_events(session_id, 10)
+        poller._get_bounded_json.assert_not_called()
+
+        for session_id, encoded_session_id in (("session/id", "session%2Fid"), ("%2e%2e", "%252e%252e")):
+            with self.subTest(session_id=session_id):
+                poller._get_bounded_json.reset_mock()
+                poller._get_session_events(session_id, 10)
+                poller._get_bounded_json.assert_called_once_with(f"/v1/sessions/{encoded_session_id}/events", params=None)
 
 
 if __name__ == "__main__":

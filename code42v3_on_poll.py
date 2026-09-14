@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
-import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import dateutil.parser
@@ -33,6 +32,7 @@ from code42v3_consts import (
     POLL_SESSION_PAGE_SIZE,
     POLL_WINDOW_SEARCH_STEPS,
 )
+from code42v3_utils import _quote_path_segment
 
 
 class Code42v3OnPoll:
@@ -132,10 +132,13 @@ class Code42v3OnPoll:
         self._poll_response_bytes = 0
 
         phantom_status = action_result.set_status(phantom.APP_SUCCESS)
-        if session_id:
+        if session_id is not None:
             self._connector.debug_print(f"In handle_on_poll with session_id: {session_id}")
-            session_id = urllib.parse.quote(str(session_id), safe="")
-            session_details = Session.parse_obj(self._get_bounded_json(f"/v1/sessions/{session_id}"))
+            try:
+                encoded_session_id = _quote_path_segment(session_id)
+            except ValueError as exc:
+                return action_result.set_status(phantom.APP_ERROR, f"Invalid source_id: {exc}")
+            session_details = Session.parse_obj(self._get_bounded_json(f"/v1/sessions/{encoded_session_id}"))
             file_events = self._get_session_events(session_details.session_id, artifact_count)
             container_id = self._create_or_update_container(session_details)
             if container_id is None:
@@ -389,8 +392,8 @@ class Code42v3OnPoll:
         if event_count > MAX_POLL_EVENTS:
             raise ValueError(f"artifact_count cannot exceed {MAX_POLL_EVENTS}")
 
-        session_id = urllib.parse.quote(str(session_id), safe="")
-        path = f"/v1/sessions/{session_id}/events"
+        encoded_session_id = _quote_path_segment(session_id)
+        path = f"/v1/sessions/{encoded_session_id}/events"
         events = []
         next_token = None
         seen_tokens = set()

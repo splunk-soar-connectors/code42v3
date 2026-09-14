@@ -14,7 +14,6 @@
 # and limitations under the License.
 import json
 import os
-import urllib.parse
 from datetime import datetime
 
 # Incydr imports
@@ -44,22 +43,12 @@ from code42v3_consts import (
     MAX_RESULTS_DEFAULT,
 )
 from code42v3_on_poll import Code42v3OnPoll
+from code42v3_utils import _quote_path_segment, _validate_identifier
 
 
 class Code42UnsupportedHashError(Exception):
     def __init__(self):
         super().__init__("Unsupported hash format. Hash must sha256")
-
-
-def _validate_identifier(value):
-    if not isinstance(value, str) or not value or value in {".", ".."}:
-        raise ValueError("Path identifiers must be non-empty strings and cannot be dot segments")
-
-    return value
-
-
-def _quote_path_segment(value):
-    return urllib.parse.quote(_validate_identifier(value), safe="")
 
 
 class Code42V3Connector(BaseConnector):
