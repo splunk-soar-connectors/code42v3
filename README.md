@@ -1367,6 +1367,7 @@ action_result.parameter.file_name | string | | |
 action_result.message | string | | |
 summary.total_objects | numeric | | |
 summary.total_objects_successful | numeric | | |
+summary.verified_sha256 | string | `sha256` | |
 action_result.status | string | | |
 action_result.parameter.file_name | string | | |
 
@@ -1374,7 +1375,7 @@ ______________________________________________________________________
 
 Auto-generated Splunk SOAR Connector documentation.
 
-Copyright 2025 Splunk Inc.
+Copyright 2026 Splunk Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

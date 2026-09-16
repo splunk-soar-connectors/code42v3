@@ -1,6 +1,6 @@
 # File: code42v3_consts.py
 #
-# Copyright (c) 2025 Splunk Inc.
+# Copyright (c) 2025-2026 Splunk Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,10 @@ PAGE_SIZE = 10000
 
 DEFAULT_CONTAINER_COUNT = 1
 DEFAULT_ARTIFACT_COUNT = 10
+
+# hunt file download limits
+HUNT_FILE_DOWNLOAD_CHUNK_SIZE = 64 * 1024
+MAX_HUNT_FILE_BYTES = 250 * 1024 * 1024
 
 
 # integer validation constants
