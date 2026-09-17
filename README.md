@@ -4,7 +4,7 @@ Publisher: Splunk <br>
 Connector Version: 1.0.0 <br>
 Product Vendor: Code42 <br>
 Product Name: Code42 v3 <br>
-Minimum Product Version: 6.3.0
+Minimum Product Version: 7.0.0
 
 Code42 provides simple, fast detection and response to everyday data loss from insider threats by focusing on customer data on endpoints and the cloud
 

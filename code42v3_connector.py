@@ -176,6 +176,10 @@ class Code42V3Connector(BaseConnector):
             self.debug_print(f"Making request on url: {url}")
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
             response.raise_for_status()
+        except HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return None
+            raise RuntimeError("Encountered an error checking for an existing artifact.") from e
         except Exception as e:
             raise RuntimeError("Encountered an error checking for an existing artifact.") from e
         # return id or None
@@ -212,6 +216,10 @@ class Code42V3Connector(BaseConnector):
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)  # nosemgrep
             response.raise_for_status()
             return response.json()
+        except HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return None
+            raise RuntimeError("Encountered an error getting container metadata.") from e
         except Exception as e:
             raise RuntimeError("Encountered an error getting container metadata.") from e
 

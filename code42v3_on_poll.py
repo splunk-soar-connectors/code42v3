@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import dateutil.parser
 import phantom.app as phantom
-import requests
 from incydr.enums.file_events import EventAction
 from incydr.enums.sessions import SortKeys
 from incydr.models import FileEventsPage, Session, SessionsPage
@@ -45,7 +44,7 @@ class Code42v3OnPoll:
     def _get_date_parameters(self):
         # returns start date and end date for the poll.
         config = self._connector.get_config()
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
         last_time = self._get_saved_last_time()
 
         if last_time is None:  # first run. No last time found.
@@ -82,9 +81,9 @@ class Code42v3OnPoll:
     def parse_datetime(date_str):
         date_time_obj = dateutil.parser.parse(date_str)
         if date_time_obj.utcoffset():
-            date_time_obj = date_time_obj.replace(tzinfo=timezone.utc) - date_time_obj.utcoffset()
+            date_time_obj = date_time_obj.replace(tzinfo=UTC) - date_time_obj.utcoffset()
         else:
-            date_time_obj = date_time_obj.replace(tzinfo=timezone.utc)
+            date_time_obj = date_time_obj.replace(tzinfo=UTC)
         return date_time_obj
 
     def _coerce_to_datetime(self, value):
@@ -92,11 +91,11 @@ class Code42v3OnPoll:
             return None, None
         if isinstance(value, datetime):
             if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc), None
-            return value.astimezone(timezone.utc), None
-        if isinstance(value, (int, float)):
+                return value.replace(tzinfo=UTC), None
+            return value.astimezone(UTC), None
+        if isinstance(value, int | float):
             timestamp = value / 1000 if value > 1_000_000_000_000 else value
-            return datetime.fromtimestamp(timestamp, tz=timezone.utc), None
+            return datetime.fromtimestamp(timestamp, tz=UTC), None
         if isinstance(value, str):
             try:
                 return self.parse_datetime(value), None
@@ -109,9 +108,9 @@ class Code42v3OnPoll:
         if not dt:
             return None
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         else:
-            dt = dt.astimezone(timezone.utc)
+            dt = dt.astimezone(UTC)
         return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
     def handle_on_poll(self, param, action_result):
@@ -138,22 +137,25 @@ class Code42v3OnPoll:
                 encoded_session_id = _quote_path_segment(session_id)
             except ValueError as exc:
                 return action_result.set_status(phantom.APP_ERROR, f"Invalid source_id: {exc}")
-            session_details = Session.parse_obj(self._get_bounded_json(f"/v1/sessions/{encoded_session_id}"))
-            file_events = self._get_session_events(session_details.session_id, artifact_count)
-            container_id = self._create_or_update_container(session_details)
-            if container_id is None:
-                phantom_status = action_result.set_status(phantom.APP_ERROR, "Error creating or updating container(s)")
-                return phantom_status
-            self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+            try:
+                session_details = Session.parse_obj(self._get_bounded_json(f"/v1/sessions/{encoded_session_id}"))
+                file_events = self._get_session_events(session_details.session_id, artifact_count)
+                container_id = self._create_or_update_container(session_details)
+                if container_id is None:
+                    raise RuntimeError("Error creating or updating container")
+                self._save_artifacts_from_file_event(container_id, file_events, artifact_count)
+            except Exception as exc:
+                self._connector.debug_print(f"error ingesting requested session {session_id}: {exc}")
+                return action_result.set_status(phantom.APP_ERROR, f"Error ingesting requested session: {exc}")
         else:
             start_dt, end_dt, dt_error = self._get_date_parameters()
             if dt_error:
                 return action_result.set_status(phantom.APP_ERROR, f"Invalid date parameter: {dt_error}")
             # Apply defaults if values are missing (caller decision)
             if start_dt is None:
-                start_dt = datetime.now(timezone.utc) - timedelta(days=30)
+                start_dt = datetime.now(UTC) - timedelta(days=30)
             if end_dt is None:
-                end_dt = datetime.now(timezone.utc)
+                end_dt = datetime.now(UTC)
             # starts from (start_dt - overlap_hours) since a session can be updated after it's ingestion.
             start_dt_overlap = start_dt - timedelta(hours=overlap_hours)
             self._connector.debug_print(f"start_dt_overlap: {start_dt_overlap}, end_dt: {end_dt}")
@@ -192,6 +194,8 @@ class Code42v3OnPoll:
                     self._connector.debug_print(f"container id: {container_id} found for session {session.session_id}")
                     try:
                         container_metadata = self._connector._get_container(container_id)
+                        if container_metadata is None:
+                            raise RuntimeError(f"Container {container_id} no longer exists")
                         file_events = self._get_session_events(session.session_id, artifact_count)
                     except Exception as e:
                         self._connector.debug_print(f"error reconciling existing session {session.session_id}: {e}")
@@ -258,13 +262,7 @@ class Code42v3OnPoll:
 
     def _get_bounded_json(self, path, params=None):
         """Download and decode one response within per-response and per-poll byte limits."""
-        session = self._client.session
-        request = requests.Request("GET", session.create_url(path), params=params)
-        prepared = session.prepare_request(request)
-        prepared.hooks["response"] = []
-        environment = session.merge_environment_settings(prepared.url, {}, True, None, None)
-        response = session.send(prepared, timeout=(10, 60), **environment)
-        try:
+        with self._client.session.get(path, params=params, timeout=(10, 60), stream=True) as response:
             response.raise_for_status()
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > MAX_POLL_RESPONSE_BYTES:
@@ -283,8 +281,6 @@ class Code42v3OnPoll:
                     raise ValueError(f"Poll responses exceeded the {MAX_POLL_TOTAL_RESPONSE_BYTES}-byte limit")
                 chunks.append(chunk)
             return json.loads(b"".join(chunks))
-        finally:
-            response.close()
 
     @staticmethod
     def _session_query_params(start_time, end_time, severities, page_num):
@@ -622,9 +618,9 @@ def _init_cef_dict(file_event):
             return None
         if isinstance(value, datetime):
             if value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
+                value = value.replace(tzinfo=UTC)
             else:
-                value = value.astimezone(timezone.utc)
+                value = value.astimezone(UTC)
             return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return value
 
