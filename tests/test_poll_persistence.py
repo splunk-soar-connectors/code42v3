@@ -20,7 +20,6 @@ from unittest.mock import Mock, patch
 
 import phantom.app as phantom
 import requests
-from pydantic import SecretStr
 
 from code42v3_connector import Code42V3Connector
 from code42v3_on_poll import Code42v3OnPoll
@@ -122,7 +121,8 @@ class PollPersistenceTest(unittest.TestCase):
     @patch("code42v3_connector.incydr.Client")
     def test_incydr_client_disables_response_body_debug_logging(self, client):
         client_secret = object()
-        sdk_secret = SecretStr(str(object()))
+        sdk_secret = Mock()
+        sdk_secret.get_secret_value.return_value = str(object())
         sdk_client = client.return_value
         sdk_client.settings.api_client_id = "client-id"
         sdk_client.settings.api_client_secret = sdk_secret
@@ -159,7 +159,7 @@ class PollPersistenceTest(unittest.TestCase):
     def test_incydr_oauth_rejects_redirect_without_reading_body(self):
         sdk_client = Mock()
         sdk_client.settings.api_client_id = "client-id"
-        sdk_client.settings.api_client_secret = SecretStr(str(object()))
+        sdk_client.settings.api_client_secret.get_secret_value.return_value = str(object())
         response = Mock(status_code=302)
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
@@ -179,7 +179,7 @@ class PollPersistenceTest(unittest.TestCase):
     def test_incydr_oauth_rejects_oversized_stream(self):
         sdk_client = Mock()
         sdk_client.settings.api_client_id = "client-id"
-        sdk_client.settings.api_client_secret = SecretStr(str(object()))
+        sdk_client.settings.api_client_secret.get_secret_value.return_value = str(object())
         response = Mock(status_code=200)
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
