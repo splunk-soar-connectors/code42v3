@@ -1,7 +1,7 @@
 # Code42 v3
 
 Publisher: Splunk <br>
-Connector Version: 1.0.0 <br>
+Connector Version: 1.0.1 <br>
 Product Vendor: Code42 <br>
 Product Name: Code42 v3 <br>
 Minimum Product Version: 7.0.0
