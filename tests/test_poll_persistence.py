@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
 import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -95,6 +96,23 @@ class PollPersistenceTest(unittest.TestCase):
 
         self.assertEqual(poller._get_bounded_json("/v1/sessions", params={"page_size": 1}), {"ok": True})
         client.session.get.assert_called_once_with("/v1/sessions", params={"page_size": 1}, timeout=(10, 60), stream=True)
+
+    @patch("code42v3_connector.incydr.Client")
+    def test_incydr_client_disables_response_body_debug_logging(self, client):
+        client_secret = object()
+        connector = Code42V3Connector()
+        connector._base_url = "https://api.example"
+        connector._client_id = "client-id"
+        connector._client_secret = client_secret
+
+        connector._create_incydr_client()
+
+        client.assert_called_once_with(
+            url="https://api.example",
+            api_client_id="client-id",
+            api_client_secret=client_secret,
+            log_level=logging.WARNING,
+        )
 
     def test_select_session_window_bounds_an_overfull_range(self):
         poller = Code42v3OnPoll(Mock(), Mock(), {})
@@ -254,6 +272,57 @@ class PollPersistenceTest(unittest.TestCase):
             )
         )
         poller._get_bounded_sessions = Mock(return_value=([self._session("session-1")], False))
+        poller._save_last_time = Mock()
+
+        status = poller.handle_on_poll({}, action_result)
+
+        self.assertEqual(status, phantom.APP_ERROR)
+        poller._save_last_time.assert_not_called()
+
+    def test_malformed_container_update_time_blocks_checkpoint(self):
+        connector = Mock()
+        connector.get_config.return_value = {"overlap_hours": 0, "severity_filter": "low"}
+        connector._get_existing_container_id_for_sdi.return_value = 1
+        connector._get_container.return_value = {"container_update_time": "not-a-timestamp"}
+        action_result = Mock()
+        action_result.set_status.side_effect = lambda status, *_args: status
+        poller = Code42v3OnPoll(connector, Mock(), {})
+        poller._get_date_parameters = Mock(
+            return_value=(
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2026, 1, 2, tzinfo=UTC),
+                None,
+            )
+        )
+        poller._get_bounded_sessions = Mock(return_value=([self._session("session-1")], False))
+        poller._get_session_events = Mock(return_value=[])
+        poller._save_artifacts_from_file_event = Mock()
+        poller._save_last_time = Mock()
+
+        status = poller.handle_on_poll({}, action_result)
+
+        self.assertEqual(status, phantom.APP_ERROR)
+        poller._save_artifacts_from_file_event.assert_not_called()
+        poller._save_last_time.assert_not_called()
+
+    def test_container_save_exception_becomes_action_failure(self):
+        connector = Mock()
+        connector.get_config.return_value = {"overlap_hours": 0, "severity_filter": "low"}
+        connector._get_existing_container_id_for_sdi.return_value = None
+        connector.save_container.side_effect = RuntimeError("platform unavailable")
+        action_result = Mock()
+        action_result.set_status.side_effect = lambda status, *_args: status
+        poller = Code42v3OnPoll(connector, Mock(), {})
+        poller._get_date_parameters = Mock(
+            return_value=(
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2026, 1, 2, tzinfo=UTC),
+                None,
+            )
+        )
+        poller._get_bounded_sessions = Mock(return_value=([self._session("session-1")], False))
+        poller._get_session_events = Mock(return_value=[])
+        poller._create_container_payload = Mock(return_value={})
         poller._save_last_time = Mock()
 
         status = poller.handle_on_poll({}, action_result)

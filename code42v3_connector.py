@@ -13,6 +13,7 @@
 # either express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
 import json
+import logging
 import os
 from datetime import datetime
 
@@ -1270,7 +1271,7 @@ class Code42V3Connector(BaseConnector):
         action_result = self.add_action_result(ActionResult(dict(param)))
 
         if self._client is None:
-            self._client = incydr.Client(url=self._base_url, api_client_id=self._client_id, api_client_secret=self._client_secret)
+            self._client = self._create_incydr_client()
 
         handlers = {
             "test_connectivity": self._handle_test_connectivity,
@@ -1310,6 +1311,17 @@ class Code42V3Connector(BaseConnector):
             ret_val = action_result.set_status(phantom.APP_ERROR, "Action not yet implemented")
 
         return ret_val
+
+    def _create_incydr_client(self):
+        return incydr.Client(
+            url=self._base_url,
+            api_client_id=self._client_id,
+            api_client_secret=self._client_secret,
+            # The SDK's DEBUG response hook materializes response.content before
+            # callers can enforce streaming limits. Keep connector responses on
+            # the bounded streaming path regardless of process environment.
+            log_level=logging.WARNING,
+        )
 
     def initialize(self):
         # Load the state in initialize, use it to store data

@@ -204,7 +204,12 @@ class Code42v3OnPoll:
                         continue
                     container_update_dt, container_update_err = self._coerce_to_datetime(container_metadata.get("container_update_time", None))
                     if container_update_err:
-                        container_update_dt = None
+                        self._connector.debug_print(
+                            f"error coercing container update time for session {session.session_id}: {container_update_err}"
+                        )
+                        phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
+                        checkpoint_blocked = True
+                        continue
                     if container_update_dt and last_updated_dt > container_update_dt:
                         self._connector.debug_print(
                             f"container update time {container_update_dt} is before last updated time {last_updated_dt}, updating container {container_id}"
@@ -440,7 +445,11 @@ class Code42v3OnPoll:
             raise RuntimeError(f"Error saving artifacts: {message}")
 
     def _create_or_update_container(self, session_details):
-        container_id = self._connector._get_existing_container_id_for_sdi(session_details.session_id)
+        try:
+            container_id = self._connector._get_existing_container_id_for_sdi(session_details.session_id)
+        except Exception as e:
+            self._connector.debug_print(f"error checking for an existing container: {e}")
+            return None
         if container_id:
             severity_score = self._normalize_severity(self._get_session_severity_from_scores(session_details.scores))
             try:
@@ -451,7 +460,11 @@ class Code42v3OnPoll:
             return container_id
         else:
             container_json = self._create_container_payload(session_details)
-            saved_successfully, error, container_id = self._connector.save_container(container_json)
+            try:
+                saved_successfully, error, container_id = self._connector.save_container(container_json)
+            except Exception as e:
+                self._connector.debug_print(f"error creating container: {e}")
+                return None
             if not saved_successfully:
                 self._connector.debug_print(f"error creating container: {error}")
                 return None
