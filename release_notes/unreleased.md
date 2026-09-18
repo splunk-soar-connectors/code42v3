@@ -7,3 +7,5 @@
 * Prevented the poll checkpoint from advancing when artifact persistence or existing-container reconciliation fails.
 * Applied strict path-segment validation to caller-supplied and API-returned polling session identifiers.
 * Removed Unicode format-control characters from Code42 session and file-event fields exposed through SOAR containers and artifacts.
+* Prevented missing or malformed existing-container timestamps and container persistence exceptions from bypassing polling failure handling.
+* Disabled Incydr SDK response-body debug logging and bounded OAuth and redirect handling so connector streaming limits remain authoritative.
