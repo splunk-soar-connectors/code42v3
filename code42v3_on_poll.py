@@ -31,7 +31,7 @@ from code42v3_consts import (
     POLL_SESSION_PAGE_SIZE,
     POLL_WINDOW_SEARCH_STEPS,
 )
-from code42v3_utils import _quote_path_segment
+from code42v3_utils import _quote_path_segment, _strip_unicode_format_controls
 
 
 class Code42v3OnPoll:
@@ -519,12 +519,14 @@ class Code42v3OnPoll:
         return session_container_sevirity_mapping.get(severity.lower())
 
     def _create_container_payload(self, session_details):
+        activity_summary = _strip_unicode_format_controls(session_details.activitySummary)
+        display_session_id = _strip_unicode_format_controls(session_details.session_id) or "unknown"
         return {
-            "name": session_details.activitySummary or f"Code42 session {session_details.session_id}",
+            "name": activity_summary or f"Code42 session {display_session_id}",
             "type": session_details.type,
             "data": json.loads(session_details.json()),
             "severity": self._normalize_severity(self._get_session_severity_from_scores(session_details.scores)),
-            "description": session_details.context_summary,
+            "description": _strip_unicode_format_controls(session_details.context_summary),
             "source_data_identifier": session_details.session_id,
             "label": self._get_container_label(),
         }
@@ -578,7 +580,7 @@ def _map_event_to_cef(file_event):
     FILE_EVENT_TO_SIGNATURE_ID_MAP = build_signature_id_map()
     cef_dict["signatureId"] = FILE_EVENT_TO_SIGNATURE_ID_MAP.get(event_action, "C42000")
     cef_dict["eventName"] = event_action
-    return cef_dict
+    return {key: _strip_unicode_format_controls(value) for key, value in cef_dict.items()}
 
 
 def _format_cef_kvp(cef_field_key, cef_field_value):
