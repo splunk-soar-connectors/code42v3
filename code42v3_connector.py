@@ -24,6 +24,8 @@ import incydr
 import phantom.app as phantom
 import phantom.utils as utils
 import requests
+from _incydr_sdk.core.auth import APIClientAuth
+from _incydr_sdk.core.models import AuthResponse
 from incydr import EventQuery
 from incydr.enums.cases import CaseStatus
 from incydr.enums.file_events import RiskSeverity
@@ -34,6 +36,7 @@ from phantom.base_connector import BaseConnector
 from phantom.vault import Vault
 from phantom_common.install_info import get_verify_ssl_setting
 from requests import HTTPError
+from requests.auth import HTTPBasicAuth
 
 from code42v3_consts import (
     CODE42V3_CASE_NUM_KEY,
@@ -41,6 +44,7 @@ from code42v3_consts import (
     CODE42V3_NON_NEG_INT_MSG,
     CODE42V3_NON_NEG_NON_ZERO_INT_MSG,
     CODE42V3_VALID_INT_MSG,
+    MAX_AUTH_RESPONSE_BYTES,
     MAX_RESULTS_DEFAULT,
 )
 from code42v3_on_poll import Code42v3OnPoll
@@ -50,6 +54,40 @@ from code42v3_utils import _quote_path_segment, _validate_identifier
 class Code42UnsupportedHashError(Exception):
     def __init__(self):
         super().__init__("Unsupported hash format. Hash must sha256")
+
+
+class _BoundedAPIClientAuth(APIClientAuth):
+    """Authenticate without allowing the SDK to buffer an unbounded response."""
+
+    def refresh(self):
+        auth = HTTPBasicAuth(
+            username=self.api_client_id,
+            password=self.api_client_secret.get_secret_value(),
+        )
+        with self.session.post(
+            "/v1/oauth",
+            auth=auth,
+            timeout=(10, 60),
+            stream=True,
+            allow_redirects=False,
+        ) as response:
+            if 300 <= response.status_code < 400:
+                raise RuntimeError("Redirect responses are not allowed for OAuth")
+            response.raise_for_status()
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > MAX_AUTH_RESPONSE_BYTES:
+                raise ValueError(f"OAuth response exceeded the {MAX_AUTH_RESPONSE_BYTES}-byte limit")
+
+            chunks = []
+            response_bytes = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                response_bytes += len(chunk)
+                if response_bytes > MAX_AUTH_RESPONSE_BYTES:
+                    raise ValueError(f"OAuth response exceeded the {MAX_AUTH_RESPONSE_BYTES}-byte limit")
+                chunks.append(chunk)
+            self.token_response = AuthResponse.parse_raw(b"".join(chunks))
 
 
 class Code42V3Connector(BaseConnector):
@@ -1271,7 +1309,10 @@ class Code42V3Connector(BaseConnector):
         action_result = self.add_action_result(ActionResult(dict(param)))
 
         if self._client is None:
-            self._client = self._create_incydr_client()
+            try:
+                self._client = self._create_incydr_client()
+            except Exception as e:
+                return action_result.set_status(phantom.APP_ERROR, f"Failed to initialize Code42 client: {e}")
 
         handlers = {
             "test_connectivity": self._handle_test_connectivity,
@@ -1313,7 +1354,7 @@ class Code42V3Connector(BaseConnector):
         return ret_val
 
     def _create_incydr_client(self):
-        return incydr.Client(
+        client = incydr.Client(
             url=self._base_url,
             api_client_id=self._client_id,
             api_client_secret=self._client_secret,
@@ -1321,7 +1362,15 @@ class Code42V3Connector(BaseConnector):
             # callers can enforce streaming limits. Keep connector responses on
             # the bounded streaming path regardless of process environment.
             log_level=logging.WARNING,
+            skip_auth=True,
         )
+        client.session.auth = _BoundedAPIClientAuth(
+            session=client.session,
+            api_client_id=client.settings.api_client_id,
+            api_client_secret=client.settings.api_client_secret,
+        )
+        client.session.auth.refresh()
+        return client
 
     def initialize(self):
         # Load the state in initialize, use it to store data

@@ -210,9 +210,10 @@ class Code42v3OnPoll:
                         phantom_status = action_result.set_status(phantom.APP_ERROR, "One or more sessions could not be ingested")
                         checkpoint_blocked = True
                         continue
-                    if container_update_dt and last_updated_dt > container_update_dt:
+                    if container_update_dt is None or last_updated_dt > container_update_dt:
                         self._connector.debug_print(
-                            f"container update time {container_update_dt} is before last updated time {last_updated_dt}, updating container {container_id}"
+                            f"container update time {container_update_dt} is missing or before last updated time {last_updated_dt}, "
+                            f"updating container {container_id}"
                         )
                         container_id = self._create_or_update_container(session)
                         if container_id is None:
@@ -267,7 +268,15 @@ class Code42v3OnPoll:
 
     def _get_bounded_json(self, path, params=None):
         """Download and decode one response within per-response and per-poll byte limits."""
-        with self._client.session.get(path, params=params, timeout=(10, 60), stream=True) as response:
+        with self._client.session.get(
+            path,
+            params=params,
+            timeout=(10, 60),
+            stream=True,
+            allow_redirects=False,
+        ) as response:
+            if 300 <= response.status_code < 400:
+                raise ValueError("Redirect responses are not allowed during polling")
             response.raise_for_status()
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > MAX_POLL_RESPONSE_BYTES:
