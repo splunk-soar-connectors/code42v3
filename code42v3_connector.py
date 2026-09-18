@@ -1,6 +1,6 @@
 # File: code42v3_connector.py
 #
-# Copyright (c) 2025 Splunk Inc.
+# Copyright (c) 2025-2026 Splunk Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # either express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
 import json
+import logging
 import os
 from datetime import datetime
 
@@ -23,6 +24,8 @@ import incydr
 import phantom.app as phantom
 import phantom.utils as utils
 import requests
+from _incydr_sdk.core.auth import APIClientAuth
+from _incydr_sdk.core.models import AuthResponse
 from incydr import EventQuery
 from incydr.enums.cases import CaseStatus
 from incydr.enums.file_events import RiskSeverity
@@ -33,6 +36,7 @@ from phantom.base_connector import BaseConnector
 from phantom.vault import Vault
 from phantom_common.install_info import get_verify_ssl_setting
 from requests import HTTPError
+from requests.auth import HTTPBasicAuth
 
 from code42v3_consts import (
     CODE42V3_CASE_NUM_KEY,
@@ -40,14 +44,50 @@ from code42v3_consts import (
     CODE42V3_NON_NEG_INT_MSG,
     CODE42V3_NON_NEG_NON_ZERO_INT_MSG,
     CODE42V3_VALID_INT_MSG,
+    MAX_AUTH_RESPONSE_BYTES,
     MAX_RESULTS_DEFAULT,
 )
 from code42v3_on_poll import Code42v3OnPoll
+from code42v3_utils import _quote_path_segment, _validate_identifier
 
 
 class Code42UnsupportedHashError(Exception):
     def __init__(self):
         super().__init__("Unsupported hash format. Hash must sha256")
+
+
+class _BoundedAPIClientAuth(APIClientAuth):
+    """Authenticate without allowing the SDK to buffer an unbounded response."""
+
+    def refresh(self):
+        auth = HTTPBasicAuth(
+            username=self.api_client_id,
+            password=self.api_client_secret.get_secret_value(),
+        )
+        with self.session.post(
+            "/v1/oauth",
+            auth=auth,
+            timeout=(10, 60),
+            stream=True,
+            allow_redirects=False,
+        ) as response:
+            if 300 <= response.status_code < 400:
+                raise RuntimeError("Redirect responses are not allowed for OAuth")
+            response.raise_for_status()
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > MAX_AUTH_RESPONSE_BYTES:
+                raise ValueError(f"OAuth response exceeded the {MAX_AUTH_RESPONSE_BYTES}-byte limit")
+
+            chunks = []
+            response_bytes = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                response_bytes += len(chunk)
+                if response_bytes > MAX_AUTH_RESPONSE_BYTES:
+                    raise ValueError(f"OAuth response exceeded the {MAX_AUTH_RESPONSE_BYTES}-byte limit")
+                chunks.append(chunk)
+            self.token_response = AuthResponse.parse_raw(b"".join(chunks))
 
 
 class Code42V3Connector(BaseConnector):
@@ -125,6 +165,7 @@ class Code42V3Connector(BaseConnector):
         # Make rest call
         try:
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
+            response.raise_for_status()
         except Exception as e:
             raise RuntimeError("Encountered an error getting the existing container ID from Phantom.") from e
 
@@ -147,12 +188,13 @@ class Code42V3Connector(BaseConnector):
             "severity": severity,
         }
         try:
-            requests.post(
+            response = requests.post(
                 f"{self.get_phantom_base_url()}rest/container/{container_id}",
                 data=json.dumps(container_metadata),
                 verify=get_verify_ssl_setting(),
                 timeout=30,
             )
+            response.raise_for_status()
         except Exception as e:
             raise RuntimeError("Encountered an error updating container metadata.") from e
 
@@ -172,8 +214,13 @@ class Code42V3Connector(BaseConnector):
         try:
             self.debug_print(f"Making request on url: {url}")
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)
-        except Exception:
-            return None
+            response.raise_for_status()
+        except HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return None
+            raise RuntimeError("Encountered an error checking for an existing artifact.") from e
+        except Exception as e:
+            raise RuntimeError("Encountered an error checking for an existing artifact.") from e
         # return id or None
         if response.json().get("data", None):
             return response.json().get("data", None)[0].get("id", None)
@@ -206,9 +253,14 @@ class Code42V3Connector(BaseConnector):
         url = f"{self.get_phantom_base_url()}rest/container/{container_id}"
         try:
             response = requests.get(url, verify=get_verify_ssl_setting(), timeout=30)  # nosemgrep
-        except Exception:
-            return None
-        return response.json()
+            response.raise_for_status()
+            return response.json()
+        except HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return None
+            raise RuntimeError("Encountered an error getting container metadata.") from e
+        except Exception as e:
+            raise RuntimeError("Encountered an error getting container metadata.") from e
 
     # test connectivity
     def _handle_test_connectivity(self, param, action_result):
@@ -234,7 +286,7 @@ class Code42V3Connector(BaseConnector):
         self.save_progress("Getting session details")
         session_id = param.get("session_id")
         try:
-            session_details = self._client.sessions.v1.get_session_details(session_id)
+            session_details = self._client.sessions.v1.get_session_details(_quote_path_segment(session_id))
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to get session details for {session_id}. Error: {e!s}")
         action_result.add_data(session_details.dict())
@@ -611,7 +663,8 @@ class Code42V3Connector(BaseConnector):
 
         user_id = param.get("user_id").strip()
         try:
-            user = self._client.users.v1.get_user(user_id)
+            user_id = _validate_identifier(user_id)
+            user = self._client.users.v1.get_user(user_id if "@" in user_id else _quote_path_segment(user_id))
         except Exception as e:
             return action_result.set_status(phantom.APP_ERROR, f"Failed to get user {user_id}. Error: {e!s}")
         action_result.add_data(json.loads(user.json()))
@@ -683,7 +736,7 @@ class Code42V3Connector(BaseConnector):
         actor_id = param.get("actor_id").strip()
         prefer_parent = param.get("prefer_parent")
         try:
-            actor = self._client.actors.v1.get_actor_by_id(actor_id=actor_id, prefer_parent=prefer_parent)
+            actor = self._client.actors.v1.get_actor_by_id(actor_id=_quote_path_segment(actor_id), prefer_parent=prefer_parent)
             action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
@@ -707,7 +760,9 @@ class Code42V3Connector(BaseConnector):
         name = param.get("name")
         prefer_parent = param.get("prefer_parent")
         try:
-            actor = self._client.actors.v1.get_actor_by_name(name=name, prefer_parent=prefer_parent)
+            name = _validate_identifier(name)
+            actor_name = _quote_path_segment(name) if prefer_parent else name
+            actor = self._client.actors.v1.get_actor_by_name(name=actor_name, prefer_parent=prefer_parent)
             action_result.add_data(actor.dict())
             action_result.update_summary(
                 {
@@ -1254,7 +1309,10 @@ class Code42V3Connector(BaseConnector):
         action_result = self.add_action_result(ActionResult(dict(param)))
 
         if self._client is None:
-            self._client = incydr.Client(url=self._base_url, api_client_id=self._client_id, api_client_secret=self._client_secret)
+            try:
+                self._client = self._create_incydr_client()
+            except Exception as e:
+                return action_result.set_status(phantom.APP_ERROR, f"Failed to initialize Code42 client: {e}")
 
         handlers = {
             "test_connectivity": self._handle_test_connectivity,
@@ -1294,6 +1352,25 @@ class Code42V3Connector(BaseConnector):
             ret_val = action_result.set_status(phantom.APP_ERROR, "Action not yet implemented")
 
         return ret_val
+
+    def _create_incydr_client(self):
+        client = incydr.Client(
+            url=self._base_url,
+            api_client_id=self._client_id,
+            api_client_secret=self._client_secret,
+            # The SDK's DEBUG response hook materializes response.content before
+            # callers can enforce streaming limits. Keep connector responses on
+            # the bounded streaming path regardless of process environment.
+            log_level=logging.WARNING,
+            skip_auth=True,
+        )
+        client.session.auth = _BoundedAPIClientAuth(
+            session=client.session,
+            api_client_id=client.settings.api_client_id,
+            api_client_secret=client.settings.api_client_secret,
+        )
+        client.session.auth.refresh()
+        return client
 
     def initialize(self):
         # Load the state in initialize, use it to store data

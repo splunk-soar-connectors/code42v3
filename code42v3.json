@@ -7,16 +7,16 @@
     "logo": "logo_code42v3.svg",
     "logo_dark": "logo_code42v3_dark.svg",
     "product_name": "Code42 v3",
-    "python_version": "3.9, 3.13",
+    "python_version": "3.13",
     "fips_compliant": true,
     "product_version_regex": ".*",
     "publisher": "Splunk",
-    "license": "Copyright (c) 2025 Splunk Inc.",
+    "license": "Copyright (c) 2025-2026 Splunk Inc.",
     "app_version": "1.0.0",
     "utctime_updated": "2025-11-05T15:33:37.284870Z",
     "package_name": "phantom_code42v3",
     "main_module": "code42v3_connector.py",
-    "min_phantom_version": "6.3.0",
+    "min_phantom_version": "7.0.0",
     "app_wizard_version": "1.0.0",
     "configuration": {
         "cloud_instance": {
@@ -4410,54 +4410,6 @@
             {
                 "module": "pydantic",
                 "input_file": "wheels/py313/pydantic-1.10.24-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
-            },
-            {
-                "module": "pygments",
-                "input_file": "wheels/py3/pygments-2.19.2-py3-none-any.whl"
-            },
-            {
-                "module": "python_dotenv",
-                "input_file": "wheels/py3/python_dotenv-1.2.1-py3-none-any.whl"
-            },
-            {
-                "module": "requests_toolbelt",
-                "input_file": "wheels/shared/requests_toolbelt-1.0.0-py2.py3-none-any.whl"
-            },
-            {
-                "module": "rich",
-                "input_file": "wheels/py3/rich-14.2.0-py3-none-any.whl"
-            },
-            {
-                "module": "typing_extensions",
-                "input_file": "wheels/py3/typing_extensions-4.15.0-py3-none-any.whl"
-            }
-        ]
-    },
-    "pip39_dependencies": {
-        "wheel": [
-            {
-                "module": "boltons",
-                "input_file": "wheels/py3/boltons-25.0.0-py3-none-any.whl"
-            },
-            {
-                "module": "incydr",
-                "input_file": "wheels/py3/incydr-2.6.0-py3-none-any.whl"
-            },
-            {
-                "module": "isodate",
-                "input_file": "wheels/py3/isodate-0.7.2-py3-none-any.whl"
-            },
-            {
-                "module": "markdown_it_py",
-                "input_file": "wheels/py3/markdown_it_py-3.0.0-py3-none-any.whl"
-            },
-            {
-                "module": "mdurl",
-                "input_file": "wheels/py3/mdurl-0.1.2-py3-none-any.whl"
-            },
-            {
-                "module": "pydantic",
-                "input_file": "wheels/py39/pydantic-1.10.24-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
             },
             {
                 "module": "pygments",
