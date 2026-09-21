@@ -1367,6 +1367,7 @@ action_result.parameter.file_name | string | | |
 action_result.message | string | | |
 summary.total_objects | numeric | | |
 summary.total_objects_successful | numeric | | |
+summary.verified_sha256 | string | `sha256` | |
 action_result.status | string | | |
 action_result.parameter.file_name | string | | |
 
