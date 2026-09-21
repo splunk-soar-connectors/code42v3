@@ -12,6 +12,7 @@
 # the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 # either express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
+import hashlib
 import json
 import logging
 import os
@@ -44,7 +45,9 @@ from code42v3_consts import (
     CODE42V3_NON_NEG_INT_MSG,
     CODE42V3_NON_NEG_NON_ZERO_INT_MSG,
     CODE42V3_VALID_INT_MSG,
+    HUNT_FILE_DOWNLOAD_CHUNK_SIZE,
     MAX_AUTH_RESPONSE_BYTES,
+    MAX_HUNT_FILE_BYTES,
     MAX_RESULTS_DEFAULT,
 )
 from code42v3_on_poll import Code42v3OnPoll
@@ -88,6 +91,18 @@ class _BoundedAPIClientAuth(APIClientAuth):
                     raise ValueError(f"OAuth response exceeded the {MAX_AUTH_RESPONSE_BYTES}-byte limit")
                 chunks.append(chunk)
             self.token_response = AuthResponse.parse_raw(b"".join(chunks))
+
+
+class Code42FileHashMismatchError(Exception):
+    def __init__(self, expected_hash, actual_hash):
+        super().__init__(
+            f"Downloaded file SHA-256 mismatch. Requested: {expected_hash}; calculated: {actual_hash}. The file was not added to the vault."
+        )
+
+
+class Code42FileTooLargeError(Exception):
+    def __init__(self):
+        super().__init__(f"Downloaded file exceeds the maximum allowed size of {MAX_HUNT_FILE_BYTES} bytes.")
 
 
 class Code42V3Connector(BaseConnector):
@@ -1255,15 +1270,38 @@ class Code42V3Connector(BaseConnector):
         if not utils.is_sha256(file_hash):
             raise Code42UnsupportedHashError()
 
+        expected_hash = file_hash.lower()
         response = self._client.files.v1.stream_file_by_sha256(sha256=file_hash)
 
-        if response.ok:
+        try:
+            response.raise_for_status()
+
+            content_length = response.headers.get("Content-Length")
             try:
-                return b"".join(chunk for chunk in response.iter_content(chunk_size=128) if chunk)
-            finally:
-                response.close()
-        else:
-            raise Exception(f"failed to get file content for {file_hash}. Error: {response.text}")
+                declared_size = int(content_length) if content_length is not None else None
+            except (TypeError, ValueError):
+                declared_size = None
+
+            if declared_size is not None and declared_size > MAX_HUNT_FILE_BYTES:
+                raise Code42FileTooLargeError()
+
+            file_content = bytearray()
+            file_digest = hashlib.sha256()
+            for chunk in response.iter_content(chunk_size=HUNT_FILE_DOWNLOAD_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                if len(file_content) + len(chunk) > MAX_HUNT_FILE_BYTES:
+                    raise Code42FileTooLargeError()
+                file_content.extend(chunk)
+                file_digest.update(chunk)
+
+            actual_hash = file_digest.hexdigest()
+            if actual_hash != expected_hash:
+                raise Code42FileHashMismatchError(expected_hash, actual_hash)
+
+            return bytes(file_content), actual_hash
+        finally:
+            response.close()
 
     def _handle_hunt_file(self, param, action_result):
         self.save_progress("Hunting file")
@@ -1273,7 +1311,7 @@ class Code42V3Connector(BaseConnector):
             file_name = file_hash
         self.save_progress("getting file content")
         try:
-            file_content = self._get_file_content(file_hash)
+            file_content, verified_sha256 = self._get_file_content(file_hash)
         except HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 return action_result.set_status(
@@ -1297,7 +1335,14 @@ class Code42V3Connector(BaseConnector):
                 phantom.APP_ERROR, f"failed to create attachment for {file_name}. Error message: {status.get('message', 'Unknown error')}"
             )
         status_message = f"{file_name} was successfully downloaded and attached to container {container_id}"
-        action_result.update_summary({"file_name": file_name, "container_id": container_id, "vault_id": status.get("vault_id")})
+        action_result.update_summary(
+            {
+                "file_name": file_name,
+                "container_id": container_id,
+                "vault_id": status.get("vault_id"),
+                "verified_sha256": verified_sha256,
+            }
+        )
         return action_result.set_status(phantom.APP_SUCCESS, status_message)
 
     def handle_action(self, param):

@@ -33,6 +33,10 @@ MAX_AUTH_RESPONSE_BYTES = 1024 * 1024
 POLL_SESSION_PAGE_SIZE = 50
 POLL_WINDOW_SEARCH_STEPS = 48
 
+# hunt file download limits
+HUNT_FILE_DOWNLOAD_CHUNK_SIZE = 64 * 1024
+MAX_HUNT_FILE_BYTES = 50 * 1024 * 1024
+
 
 # integer validation constants
 CODE42V3_VALID_INT_MSG = "Please provide a valid integer value in the '{param}' action parameter"
